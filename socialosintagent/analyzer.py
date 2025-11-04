@@ -29,21 +29,25 @@ from .llm import LLMAnalyzer
 from .platforms import FETCHERS
 from .utils import handle_rate_limit, sanitize_username
 
-# Load environment variables from a .env file in the project root
-project_root = Path(__file__).resolve().parent.parent
-dotenv_path = project_root / '.env'
-load_dotenv(dotenv_path=dotenv_path, override=True)
+# --- Best of Both Worlds Environment Loading ---
+# If /.dockerenv exists, we're in a container; let Docker Compose manage the env.
+# Otherwise, we're running locally, so load the .env file for convenience.
+if not os.path.exists('/.dockerenv'):
+    print(">>> Running in local mode: Loading .env file...")
+    project_root = Path(__file__).resolve().parent.parent
+    dotenv_path = project_root / '.env'
+    load_dotenv(dotenv_path=dotenv_path, override=True)
 
 logger = logging.getLogger("SocialOSINTAgent")
 
 class SocialOSINTAgent:
-    def __init__(self, args):
+    def __init__(self, args, cache_manager: CacheManager, llm_analyzer: LLMAnalyzer):
         self.console = Console()
         self.args = args
         self.base_dir = Path("data")
         self._setup_directories()
-        self.cache = CacheManager(self.base_dir, self.args.offline)
-        self.llm = LLMAnalyzer(self.args.offline)
+        self.cache = cache_manager
+        self.llm = llm_analyzer
         self._twitter: Optional[tweepy.Client] = None
         self._reddit: Optional[praw.Reddit] = None
         self._bluesky: Optional[Client] = None
@@ -109,27 +113,53 @@ class SocialOSINTAgent:
 
     def get_mastodon_clients(self) -> tuple[Dict[str, Mastodon], Optional[Mastodon]]:
         if not self._mastodon_clients_initialized:
-            config_path_str = os.getenv("MASTODON_CONFIG_FILE", "mastodon_instances.json")
-            config_path = self.base_dir / config_path_str if (self.base_dir / config_path_str).is_file() else Path(config_path_str)
-            if not config_path.is_file():
-                self._mastodon_clients_initialized = True
-                return {}, None
-            with open(config_path, "r", encoding="utf-8") as f:
-                instances_config = json.load(f)
-            for conf in instances_config:
-                url, token = conf.get("api_base_url"), conf.get("access_token")
-                if not url or not token: continue
+            logger.info("Initializing Mastodon clients from environment variables...")
+            i = 1
+            while True:
+                # Construct the variable names for the current instance index
+                base_url_var = f"MASTODON_INSTANCE_{i}_URL"
+                token_var = f"MASTODON_INSTANCE_{i}_TOKEN"
+                default_var = f"MASTODON_INSTANCE_{i}_DEFAULT"
+
+                url = os.getenv(base_url_var)
+                token = os.getenv(token_var)
+
+                # If the URL for the current index doesn't exist, we're done
+                if not url:
+                    logger.debug(f"No Mastodon instance found for index {i}. Stopping search.")
+                    break
+
+                if not token:
+                    logger.warning(f"Found {base_url_var} but missing {token_var}. Skipping instance {i}.")
+                    i += 1
+                    continue
+                
                 try:
                     client = Mastodon(access_token=token, api_base_url=url)
-                    if not self.args.offline: client.instance()
+                    if not self.args.offline:
+                        client.instance() # Verify connection
+                    
                     self._mastodon_clients[url.rstrip('/')] = client
-                    if conf.get("is_default_lookup_instance"):
+                    logger.info(f"Successfully initialized Mastodon client for {url}")
+
+                    # Check if this instance is marked as the default
+                    is_default = os.getenv(default_var, 'false').lower() == 'true'
+                    if is_default:
                         self._default_mastodon_lookup_client = client
+                        logger.info(f"Set {url} as the default Mastodon lookup instance.")
+
                 except Exception as e:
-                    logger.error(f"Failed to initialize Mastodon instance {url}: {e}")
+                    logger.error(f"Failed to initialize Mastodon instance {url} from env vars: {e}")
+                
+                i += 1 # Move to the next potential instance
+
+            # Fallback: if no default was explicitly set, use the first available client
             if not self._default_mastodon_lookup_client and self._mastodon_clients:
                 self._default_mastodon_lookup_client = next(iter(self._mastodon_clients.values()))
+                logger.info("No default Mastodon instance specified, using first available as fallback.")
+
             self._mastodon_clients_initialized = True
+            
         return self._mastodon_clients, self._default_mastodon_lookup_client
 
     def get_platform_client(self, platform: str) -> Any:
@@ -169,23 +199,50 @@ class SocialOSINTAgent:
     def _handle_cache_status(self):
         self.console.print("\n[bold cyan]Cache Status Overview:[/bold cyan]")
         cache_dir = self.base_dir / "cache"
-        if not any(cache_dir.iterdir()): self.console.print("[yellow]No cache files found.[/yellow]\n"); return
+        
+        if not cache_dir.is_dir():
+            self.console.print("[yellow]Cache directory not found.[/yellow]\n")
+            return
+
         table = Table(title="Cached Data Summary", show_lines=True)
-        table.add_column("Platform", style="cyan"); table.add_column("Username", style="magenta"); table.add_column("Last Fetched (UTC)", style="green", min_width=19, max_width=19); table.add_column("Age", style="yellow"); table.add_column("Items", style="blue", justify="right"); table.add_column("Media (A/F)", style="dim", justify="right")
+        table.add_column("Platform", style="cyan")
+        table.add_column("Username", style="magenta")
+        table.add_column("Last Fetched (UTC)", style="green", min_width=19, max_width=19)
+        table.add_column("Age", style="yellow")
+        table.add_column("Items", style="blue", justify="right")
+        table.add_column("Media (A/F)", style="dim", justify="right")
+        
         for file in sorted(cache_dir.glob("*.json")):
             try:
                 platform, username = file.stem.split("_", 1)
                 data = self.cache.load(platform, username)
                 if not data: continue
+                
                 ts_str = data.get("timestamp", "N/A")
                 age = self._format_cache_age(ts_str) if ts_str != "N/A" else "N/A"
-                counts = {"twitter": f"{len(data.get('tweets',[]))}t", "reddit": f"{len(data.get('submissions',[]))}s, {len(data.get('comments',[]))}c", "bluesky": f"{len(data.get('posts',[]))}p", "mastodon": f"{len(data.get('posts',[]))}p", "hackernews": f"{len(data.get('items',[]))}i"}
+                
+                counts_parts = []
+                if 'tweets' in data: counts_parts.append(f"{len(data['tweets'])}t")
+                if 'submissions' in data: counts_parts.append(f"{len(data['submissions'])}s")
+                if 'comments' in data: counts_parts.append(f"{len(data['comments'])}c")
+                if 'posts' in data: counts_parts.append(f"{len(data['posts'])}p")
+                if 'items' in data: counts_parts.append(f"{len(data['items'])}i")
+                counts_str = ", ".join(counts_parts) or "N/A"
+
                 media_analyzed = len([m for m in data.get('media_analysis', []) if m and m.strip()])
                 media_found = len(data.get('media_paths', []))
-                media = f"{media_analyzed}/{media_found}"
-                table.add_row(platform.capitalize(), username, ts_str[:19], age, counts.get(platform, "N/A"), media)
-            except Exception as e: logger.error(f"Error processing {file.name} for status: {e}")
-        self.console.print(table)
+                media_str = f"{media_analyzed}/{media_found}"
+                
+                table.add_row(platform.capitalize(), username, ts_str[:19], age, counts_str, media_str)
+            except Exception as e: 
+                logger.error(f"Error processing {file.name} for status: {e}")
+
+        if table.row_count > 0:
+            self.console.print(table)
+        else:
+            self.console.print("[yellow]No valid cache files found to display.[/yellow]\n")
+        
+        Prompt.ask("\n[dim]Press Enter to return to the menu[/dim]", default="")
 
     def _get_cache_info_string(self, platform: str, username: str) -> str:
         data = self.cache.load(platform, username)
@@ -203,8 +260,8 @@ class SocialOSINTAgent:
         if not check_creds or os.getenv("TWITTER_BEARER_TOKEN"): available.append("twitter")
         if not check_creds or all(os.getenv(k) for k in ["REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET", "REDDIT_USER_AGENT"]): available.append("reddit")
         if not check_creds or all(os.getenv(k) for k in ["BLUESKY_IDENTIFIER", "BLUESKY_APP_SECRET"]): available.append("bluesky")
-        config_file = os.getenv("MASTODON_CONFIG_FILE", "mastodon_instances.json")
-        if not check_creds or Path(config_file).is_file() or (self.base_dir / config_file).is_file(): available.append("mastodon")
+        # Check for Mastodon env vars instead of a file
+        if not check_creds or os.getenv("MASTODON_INSTANCE_1_URL"): available.append("mastodon")
         available.append("hackernews")
         return sorted(list(set(available)))
 

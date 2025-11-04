@@ -1,10 +1,13 @@
 import argparse
 import logging
 import sys
+from pathlib import Path
 
 from rich.console import Console
 
 from socialosintagent.analyzer import SocialOSINTAgent
+from socialosintagent.cache import CacheManager
+from socialosintagent.llm import LLMAnalyzer
 
 def main():
     parser = argparse.ArgumentParser(
@@ -21,16 +24,17 @@ Optional for OpenRouter:
   OPENROUTER_REFERER      : Your site URL or app name.
   OPENROUTER_X_TITLE      : Your project name.
 
-Platform Credentials (at least one set required, or use HackerNews / Mastodon config):
+Platform Credentials (at least one set required, or use HackerNews):
   TWITTER_BEARER_TOKEN    : Twitter API v2 Bearer Token.
   REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT
   BLUESKY_IDENTIFIER, BLUESKY_APP_SECRET
   
-Mastodon Configuration:
-  MASTODON_CONFIG_FILE    : Path to a JSON file for Mastodon instance configurations.
-                            (Default: "mastodon_instances.json")
+Mastodon Configuration (via Environment Variables):
+  MASTODON_INSTANCE_1_URL, MASTODON_INSTANCE_1_TOKEN, MASTODON_INSTANCE_1_DEFAULT="true"
+  MASTODON_INSTANCE_2_URL, MASTODON_INSTANCE_2_TOKEN
+  (Continue numbering for more instances)
 
-Place these in a `.env` file or set them in your environment.
+Place all variables in a `.env` file or set them in your environment.
 """,
     )
     parser.add_argument("--stdin", action="store_true", help="Read analysis request from stdin as JSON.")
@@ -54,7 +58,10 @@ Place these in a `.env` file or set them in your environment.
         logging.info("Running in OFFLINE mode.")
 
     try:
-        analyzer_instance = SocialOSINTAgent(args)
+        base_dir = Path("data")
+        cache_manager = CacheManager(base_dir, args.offline)
+        llm_analyzer = LLMAnalyzer(args.offline)
+        analyzer_instance = SocialOSINTAgent(args, cache_manager, llm_analyzer)
         if args.stdin:
             analyzer_instance.process_stdin()
         else:

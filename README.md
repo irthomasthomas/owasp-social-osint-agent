@@ -5,7 +5,7 @@
 
 ## 🌟 Key Features
 
-✅ **Multi-Platform Data Collection:** Aggregates data from Twitter/X, Reddit, Bluesky, Hacker News (via Algolia API), and Mastodon (multi-instance support, with federated user lookup if a default instance is configured).
+✅ **Multi-Platform Data Collection:** Aggregates data from Twitter/X, Reddit, Bluesky, Hacker News (via Algolia API), and Mastodon (multi-instance support via environment variables).
 
 ✅ **AI-Powered Analysis:** Utilises configurable models via OpenAI-compatible APIs for sophisticated text and image analysis.
 
@@ -33,13 +33,11 @@
 
 ✅ **Cache Status Overview:** An interactive command (`cache status`) to display a summary of all locally cached user data, including when it was fetched, its age, and item counts.
 
-✅ **Interactive CLI:** User-friendly command-line interface with rich formatting (`rich`) for platform selection, user input, and displaying results.
+✅ **Interactive CLI & Docker Support:** User-friendly command-line interface with rich formatting (`rich`) that runs both locally and within a fully containerized Docker environment.
 
 ✅ **Programmatic/Batch Mode:** Supports input via JSON from stdin for automated workflows (`--stdin`).
 
-✅ **Detailed Logging:** Logs errors and operational details to `analyzer.log`.
-
-✅ **Environment Variable Configuration:** Easy setup using environment variables or a `.env` file, and a JSON file for Mastodon instances.
+✅ **Secure Environment Variable Configuration:** All secrets and configurations are managed via a `.env` file, following modern security best practices.
 
 ✅ **Data Purging:** Interactive option to purge cached text/metadata, media files, or output reports.
 
@@ -206,25 +204,17 @@ flowchart TD
 ## 🛠 Installation
 
 ### Prerequisites
-*   **Python 3.8+**
-*   Pip (Python package installer)
+*   **Python 3.8+** and Pip (for local development)
+*   **Docker and Docker Compose** (recommended for stable, reproducible environment)
 
 ### Steps
-1.  **Clone the repository (if you haven't already):**
+1.  **Clone the repository:**
     ```bash
     git clone https://github.com/bm-github/owasp-social-osint-agent.git
     cd owasp-social-osint-agent
     ```
-2.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-    *(Ensure `requirements.txt` includes: `httpx`, `tweepy`, `praw`, `Mastodon.py`, `beautifulsoup4`, `rich`, `Pillow`, `atproto`, `python-dotenv`, `openai`, `humanize`)*
-
-3.  **Set up Configuration:**
-
-    **a. Environment Variables (`.env` file):**
-    Create a `.env` file in the project root or export the following environment variables:
+2.  **Set up Configuration (`.env` file):**
+    Create a `.env` file in the project root by copying the example below. Fill in your own API keys and credentials.
 
     ```dotenv
     # .env
@@ -235,7 +225,7 @@ flowchart TD
     ANALYSIS_MODEL="your_text_analysis_model_name"
     IMAGE_ANALYSIS_MODEL="your_vision_model_name"
 
-    # --- Optional: OpenRouter Specific Headers (if LLM_API_BASE_URL is OpenRouter) ---
+    # --- Optional: OpenRouter Specific Headers ---
     # OPENROUTER_REFERER="http://localhost:3000"
     # OPENROUTER_X_TITLE="owasp-social-osint-agent"
 
@@ -251,155 +241,90 @@ flowchart TD
     # Bluesky
     BLUESKY_IDENTIFIER="your-handle.bsky.social"
     BLUESKY_APP_SECRET="xxxx-xxxx-xxxx-xxxx" # App Password
+    
+    # --- Mastodon Instances (as needed) ---
+    # Instance 1 (Set one as default for federated lookups)
+    MASTODON_INSTANCE_1_URL="https://mastodon.social"
+    MASTODON_INSTANCE_1_TOKEN="YOUR_ACCESS_TOKEN_FOR_MASTODON_SOCIAL"
+    MASTODON_INSTANCE_1_DEFAULT="true"
 
-    # --- Mastodon Configuration File Path ---
-    # Path to your Mastodon JSON config. Defaults to "mastodon_instances.json" if not set.
-    # The script checks in 'data/mastodon_instances.json' first, then 'mastodon_instances.json' in CWD.
-    # MASTODON_CONFIG_FILE="config/my_mastodon_servers.json"
+    # Instance 2
+    MASTODON_INSTANCE_2_URL="https://another.instance.org"
+    MASTODON_INSTANCE_2_TOKEN="YOUR_ACCESS_TOKEN_FOR_THE_OTHER_INSTANCE"
     ```
     *Note: HackerNews does not require API keys.*
 
-    **b. Mastodon Instance Configuration (JSON file):**
-    If using Mastodon, create a JSON file (e.g., `mastodon_instances.json` in the script's current working directory, or specify a custom path in `.env` via `MASTODON_CONFIG_FILE`).
-
-    **Example `mastodon_instances.json`:**
-    ```json
-    [
-      {
-        "name": "Mastodon.Social (Default for Lookups)",
-        "api_base_url": "https://mastodon.social",
-        "access_token": "YOUR_ACCESS_TOKEN_FOR_MASTODON_SOCIAL",
-        "is_default_lookup_instance": true
-      },
-      {
-        "name": "Tech Instance",
-        "api_base_url": "https://example2.org",
-        "access_token": "YOUR_ACCESS_TOKEN_FOR_OTHER_ORG"
-      },
-      {
-        "name": "Another Server",
-        "api_base_url": "https://mastodon.example.net",
-        "access_token": "YOUR_ACCESS_TOKEN_FOR_EXAMPLE_NET"
-      }
-    ]
-    ```
-    *   **`name`**: A user-friendly name for the instance (optional).
-    *   **`api_base_url`**: **Required.** The full base URL of the Mastodon instance (e.g., `https://mastodon.social`).
-    *   **`access_token`**: **Required.** Your application's access token for this specific instance.
-    *   **`is_default_lookup_instance`**: (Optional, boolean) If `true`, this instance's client will be used for looking up users on Mastodon instances not explicitly listed in this config (federated lookup). **Only one instance should be marked as `true`.** If none are marked, the first successfully initialized client may be used as a fallback.
-
 ## 🚀 Usage
 
-### Interactive Mode
-Run the script as a module from the project root to start the interactive CLI.
-```bash
-python -m socialosintagent.main
-```
-1.  From the main menu, you can select platforms for analysis, purge data, or view the cache status.
-2.  Enter the username(s) for the selected platform(s).
-    *   **Twitter:** Usernames *without* the leading `@`.
-    *   **Reddit:** Usernames *without* the leading `u/`.
-    *   **Hacker News:** Case-sensitive usernames as they appear.
-    *   **Bluesky:** Full handles (e.g., `handle.bsky.social`).
-    *   **Mastodon:** Full handles in `user@instance.domain` format.
-3.  Enter the default number of items to fetch per target (e.g., `50`).
-4.  Once in the analysis session, enter your queries.
-5.  **Special commands within the analysis loop:**
-    *   `loadmore [<platform/user>] <count>`: Fetch additional items. If the target is unambiguous (only one user is being analyzed), you can omit `<platform/user>`. Examples: `loadmore 100`, `loadmore reddit/user123 50`.
-    *   `refresh`: Re-fetch data for all targets, ignoring the 24-hour cache.
-    *   `cache status`: View a summary of all locally cached data (from main menu).
-    *   `help`: Displays available commands in the analysis session.
-    *   `exit`: Returns to the main platform selection menu.
-6.  **Offline Mode Behavior:** In offline mode, the tool will only load data from the local cache (`data/cache/`). If no cache exists for a requested user/platform, analysis for that target will be skipped (a warning will be shown). No new data is fetched from social platforms, and *no new media is downloaded or analyzed*.
+### Recommended: Docker Mode
 
-### Programmatic Mode (via Stdin)
-Provide input as a JSON object via standard input using the `--stdin` flag. This is useful for scripting or batch processing.
+This is the most stable and reproducible way to run the agent.
 
-**Example `stdin` Request with a "Fetch Plan":**
-```bash
-echo '{
-  "platforms": {
-    "twitter": ["user101"],
-    "reddit": ["handle1"]
-  },
-  "query": "Compare the communication style of the twitter account and the Reddit user.",
-  "fetch_options": {
-    "default_count": 50,
-    "targets": {
-      "twitter:user101": {
-        "count": 200
-      }
-    }
-  }
-}' | python -m socialosintagent.main --stdin
-```
-*   In this example, the script fetches **200** tweets for `twitter:user101` (the override) and **50** items for `reddit:handle1` (the `default_count`).
+1.  **Build the Docker image:**
+    ```bash
+    docker-compose build
+    ```
+2.  **Run in Interactive Mode:**
+    ```bash
+    docker-compose run --rm social-osint-agent
+    ```
+3.  **Run in Programmatic Mode (via Stdin):**
+    ```bash
+    echo '{
+      "platforms": { "hackernews": ["pg"] },
+      "query": "What are Paul Graham's main interests?"
+    }' | docker-compose run --rm -T social-osint-agent --stdin
+    ```
 
-Combine with `--offline` to use only cached data:
+### Local Development Mode
 
-When using `--stdin --offline`, only cached data will be used. If a platform/user has no cache entry, it will be skipped. The tool will exit with a non-zero status code if *no* data could be loaded for *any* requested target due to missing cache entries, or if the analysis results in an error.
+1.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+2.  **Run the script:**
+    (Ensure your `.env` file is in the project root)
+    ```bash
+    python -m socialosintagent.main
+    ```
 
 ### Command-line Arguments
 *   `--stdin`: Read analysis configuration from standard input as a JSON object.
-*   `--format [json|markdown]`: Specifies the output format when saving results (default: `markdown`). Also affects output format in `--stdin` mode if `--no-auto-save` is not used.
+*   `--format [json|markdown]`: Specifies the output format when saving results (default: `markdown`).
 *   `--no-auto-save`: Disable automatic saving of reports.
-    *   In interactive mode: Prompts the user whether to save the report and in which format.
-    *   In stdin mode: Prints the report directly to standard output instead of saving to a file.
 *   `--log-level [DEBUG|INFO|WARNING|ERROR|CRITICAL]`: Set the logging level (default: `WARNING`).
-*   `--offline`: Run in offline mode. Uses only cached data, no new API calls to social platforms or for new media downloads/vision model analysis.
+*   `--offline`: Run in offline mode. Uses only cached data.
+
+### Special Commands (Interactive Mode)
+Within the analysis session, you can use these commands instead of an analysis query:
+*   `loadmore [<platform/user>] <count>`: Fetch additional items. If the target is unambiguous (only one user is being analyzed), you can omit `<platform/user>`. Examples: `loadmore 100`, `loadmore reddit/user123 50`.
+*   `refresh`: Re-fetch data for all targets, ignoring the 24-hour cache.
+*   `help`: Displays available commands in the analysis session.
+*   `exit`: Returns to the main platform selection menu.
 
 ## ⚡ Cache System
 *   **Text/API Data:** Fetched platform data is cached for **24 hours** in `data/cache/` as JSON files (`{platform}_{username}.json`). This minimizes redundant API calls.
-*   **Media Files:** Downloaded images and media are stored in `data/media/` using hashed filenames (e.g., `{url_hash}.jpg`). These are not automatically purged by the 24-hour cache expiry but are reused if the same URL is encountered.
-*   In **Offline Mode (`--offline`)**, new data is *not* fetched, and the cache files are *not* updated or extended. The tool relies purely on the existing cache contents. New media files are *not* downloaded.
-*   Use the `refresh` command in interactive mode (online mode only) to force a bypass of the cache for the current session.
+*   **Media Files:** Downloaded images and media are stored in `data/media/` using hashed filenames (e.g., `{url_hash}.jpg`). These are not automatically purged but are reused if the same URL is encountered.
+*   In **Offline Mode (`--offline`)**, the cache is used as the exclusive data source. No new data is fetched, and the cache expiry is ignored.
+*   Use the `refresh` command in interactive mode to force a bypass of the cache for the current session.
 *   Use the "Purge Data" or "Cache Status" options in the main interactive menu to manage and inspect your local cache.
 
 ## 🔍 Error Handling & Logging
-*   **Rate Limits:** Detects API rate limits. For Twitter, Mastodon, and some LLM providers, it attempts to display the reset time and estimated wait duration. For others, it provides a general rate limit message. The specific `RateLimitExceededError` is raised internally. **Note:** Rate limit handling is bypassed in offline mode as no API calls are made.
-*   **API Errors:** Handles common platform-specific errors (e.g., user not found, forbidden access, general request issues) during online fetching. **Note:** These errors are avoided in offline mode as fetching is skipped.
-*   **LLM API Errors:** Handles errors from the LLM API (e.g., authentication, rate limits, bad requests), providing informative messages.
-*   **Media Download Errors:** Logs issues during media download or processing (online mode only).
-*   **Offline Mode Specifics:** In offline mode, if cache is missing for a requested target, a warning is logged and the target is skipped for analysis. No errors related to network connectivity or API issues will occur.
+*   **Rate Limits:** Detects API rate limits and provides informative feedback.
+*   **API Errors:** Handles common platform-specific errors (e.g., user not found, forbidden access).
 *   **Logging:** Detailed errors and warnings are logged to `analyzer.log`. The log level can be configured using the `--log-level` argument.
 
 ## 🤖 AI Analysis Details
-*   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt. This prevents the LLM from making temporal errors (e.g., calling a recent post "in the future") due to its fixed knowledge cutoff date.
-*   **Text Analysis:**
-    *   Receives **formatted summaries** of fetched data (user info, stats, recent post/comment text snippets, media presence indicators) per platform.
-*   **Image Analysis:**
-    *   Each analyzed image is presented with a **direct link to its source URL** for verification.
-*   **Shared Link Analysis:**
-    *   The tool automatically extracts all external URLs from the user's posts, counts the frequency of each domain, and provides a "Top Shared Domains" list.
-*   **Integration:** The final analysis is performed by an LLM guided by a detailed system prompt. It synthesizes insights from the user's text, the linked image analyses, and the shared domain summary to build a comprehensive profile and answer the user's query.
-
-### Example Report Snippet
-The data provided to the main analysis LLM is structured to be clear and verifiable. This is a simplified example of how the media and link analysis portions of the data might look before being passed to the final LLM for synthesis:
-
-> ### Consolidated Media Analysis:
->
-> - **Analysis for Image:** [https://pbs.twimg.com/media/abc123example.jpg](https://pbs.twimg.com/media/abc123example.jpg)
->   - **Setting/Environment:** Outdoor, urban environment, likely a public square or park.
->   - **Key Objects/Items:** A distinctive clock tower is visible in the background. Several modern-looking benches are in the foreground.
->
-> ### Top Shared Domains:
-> - **github.com:** 8 links
-> - **youtube.com:** 5 links
-> - **theverge.com:** 3 links
-
-## 📸 Media Processing Details
-*   Downloads media files (images: `JPEG, PNG, GIF, WEBP`; some videos might be downloaded but not analyzed visually by default) linked in posts/tweets. **Note:** This step is skipped in Offline Mode (`--offline`) if the media is not already cached.
-*   Stores files locally in `data/media/`.
-*   Handles platform-specific access during download (online mode).
-*   Analyzes valid downloaded images using the vision LLM. **Note:** This step is skipped in Offline Mode if the image file is not in the local cache.
+*   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt. This prevents the LLM from making temporal errors due to its fixed knowledge cutoff date.
+*   **Data Synthesis:** The final analysis is performed by an LLM guided by a detailed system prompt. It synthesizes insights from the user's text, the linked image analyses, and the shared domain summary to build a comprehensive profile and answer the user's query.
 
 ## 🔒 Security Considerations
-*   **API Keys:** Requires potentially sensitive API keys and secrets (e.g., `LLM_API_KEY`, platform tokens, Mastodon instance tokens in the JSON config) stored in environment variables or in a `.env` file and `mastodon_instances.json`. Ensure these files are secured and added to `.gitignore`. LLM keys/URLs are still needed even in offline mode as the analysis itself is performed by the LLM.
-*   **Data Caching:** Fetched data and downloaded media are stored locally in the `data/` directory. Be mindful of the sensitivity of the data being analyzed and secure the directory appropriately. **In offline mode, this cache is the *only* data source.**
-*   **Terms of Service:** Ensure your use of the tool complies with the Terms of Service of each social media platform and your chosen LLM API provider. Automated querying can be subject to restrictions. Using offline mode may mitigate some ToS concerns related to excessive querying, but does not negate ToS related to data storage or analysis.
+*   **API Keys:** All secrets (API keys, tokens, etc.) should be stored in the `.env` file. This file should be secured and **never** committed to version control. Ensure `.env` is listed in your `.gitignore` file.
+*   **Data Caching:** Fetched data and downloaded media are stored locally in the `data/` directory. Be mindful of the sensitivity of the data being analyzed and secure the directory appropriately.
+*   **Terms of Service:** Ensure your use of the tool complies with the Terms of Service of each social media platform and your chosen LLM API provider.
 
 ## 🤝 Contributing
 Contributions are welcome! Please feel free to submit pull requests, report issues, or suggest enhancements via the project's issue tracker.
 
 ## 📜 License
-This project is licensed under the **MIT License**. See the `LICENSE` file for details.
+This project is licensed under the **MIT License**.

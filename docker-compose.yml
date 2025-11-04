@@ -1,0 +1,16 @@
+services:
+  social-osint-agent:
+    # Build the image from the Dockerfile in the current directory
+    build: .
+    # Name the image for easier management
+    image: social-osint-agent:latest
+    # Mount the local 'data' directory into the container at /app/data
+    # This ensures cache, media, and reports persist outside the container.
+    volumes:
+      - ./data:/app/data
+    # Load environment variables from the .env file
+    env_file:
+      - .env
+    # Required for the interactive CLI prompt to work correctly
+    tty: true
+    stdin_open: true

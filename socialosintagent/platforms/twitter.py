@@ -224,6 +224,8 @@ def fetch_data(
         logger.info(f"Successfully updated Twitter cache for @{username}. Total tweets cached: {len(final_data['tweets'])}")
         return final_data
 
+    except (UserNotFoundError, AccessForbiddenError, RateLimitExceededError) as e:
+        raise e
     except tweepy.TooManyRequests as e:
         raise RateLimitExceededError("Twitter API rate limit exceeded.")
     except tweepy.errors.NotFound:
