@@ -5,9 +5,11 @@
 
 ## 🌟 Key Features
 
-✅ **Multi-Platform Data Collection:** Aggregates data from Twitter/X, Reddit, Bluesky, Hacker News (via Algolia API), and Mastodon (multi-instance support via environment variables).
+✅ **Multi-Platform Data Collection:** Aggregates data from Twitter/X, Reddit, Bluesky, Hacker News (via Algolia API), and Mastodon (multi-instance support).
 
-✅ **AI-Powered Analysis:** Utilises configurable models via OpenAI-compatible APIs for sophisticated text and image analysis.
+✅ **AI-Powered Analysis:** Utilises configurable models via OpenAI-compatible APIs for sophisticated text and image analysis. Employs externalized, easily editable prompt files.
+
+✅ **Efficient Two-Phase Analysis:** The agent first fetches all textual data and downloads all media across all targets. Only after all data collection is complete does it begin the (slower) vision analysis phase, ensuring maximum efficiency and preventing data fetching from being blocked.
 
 ✅ **Cross-Account Comparison:** Analyze profiles across multiple selected platforms simultaneously.
 
@@ -15,31 +17,27 @@
 
 ✅ **Structured AI Prompts:** Employs detailed system prompts for objective, evidence-based analysis focusing on behavior, semantics, interests, and communication style.
 
-✅ **Vision-Capable Image Analysis:** Analyzes downloaded images (`JPEG, PNG, GIF, WEBP`) for OSINT insights using a vision-enabled LLM, focusing on objective details (setting, objects, people, text, activity). Images are pre-processed (e.g., resized to a max dimension like 1536px, first frame of GIFs).
+✅ **Vision-Capable Image Analysis:** Analyzes downloaded images (`JPEG, PNG, GIF, WEBP`) for OSINT insights using a vision-enabled LLM, focusing on objective details.
 
-✅ **Flexible Fetch Control:** Interactively set a default fetch count for all targets. Use the `loadmore` command to incrementally fetch more data for specific users, or define a detailed "Fetch Plan" in programmatic mode to specify exact counts per target.
+✅ **Flexible Fetch Control:** Interactively set a default fetch count for all targets. Use the `loadmore` command to incrementally fetch more data for specific users, or define a detailed "Fetch Plan" in programmatic mode.
 
 ✅ **Linked Image Analysis:** Each AI-generated image analysis in the final report includes a direct, clickable link to the source image, making it easy to cross-reference and verify findings.
 
-✅ **Shared Domain Analysis:** Automatically extracts all external links shared by a user, counts the frequency of each domain, and includes a "Top Shared Domains" summary in the final report. This reveals the user's information diet, influences, and primary sources.
+✅ **Shared Domain Analysis:** Automatically extracts all external links shared by a user, counts the frequency of each domain, and includes a "Top Shared Domains" summary in the final report.
 
-✅ **Offline Mode (`--offline`):** Run analysis using only locally cached data, ignores cache expiry, skipping all external network requests (social platforms, media downloads, *new* vision analysis).
+✅ **Offline Mode (`--offline`):** Run analysis using only locally cached data. Skips all external network requests (social platforms, media downloads, and *new* vision analysis).
 
-✅ **Efficient Media Handling:** Downloads media, stores it locally, handles platform-specific authentication (e.g., Twitter Bearer, Bluesky JWT for CDN), processes Reddit galleries, and resizes large images for analysis.
+✅ **Intelligent Rate Limit Handling:** Detects API rate limits from social platforms and LLM providers, provides informative feedback, and prevents excessive requests.
 
-✅ **Intelligent Rate Limit Handling:** Detects API rate limits (especially detailed for Twitter, Mastodon, & LLM APIs, showing reset times), provides informative feedback, and prevents excessive requests. Raises `RateLimitExceededError`.
+✅ **Robust Caching System:** Caches fetched text data for 24 hours (`data/cache/`) and media files (`data/media/`) to reduce API calls and speed up subsequent analyses. Vision analysis results are also cached.
 
-✅ **Robust Caching System:** Caches fetched data for 24 hours (`data/cache/`) to reduce API calls and speed up subsequent analyses. Media files are cached in `data/media/`.
-
-✅ **Cache Status Overview:** An interactive command (`cache status`) to display a summary of all locally cached user data, including when it was fetched, its age, and item counts.
+✅ **Cache Management:** Interactive commands (`cache status`, `purge data`) to display a summary of all cached data or to purge specific types of data (cache, media, or reports).
 
 ✅ **Interactive CLI & Docker Support:** User-friendly command-line interface with rich formatting (`rich`) that runs both locally and within a fully containerized Docker environment.
 
 ✅ **Programmatic/Batch Mode:** Supports input via JSON from stdin for automated workflows (`--stdin`).
 
-✅ **Secure Environment Variable Configuration:** All secrets and configurations are managed via a `.env` file, following modern security best practices.
-
-✅ **Data Purging:** Interactive option to purge cached text/metadata, media files, or output reports.
+✅ **Secure Environment Variable Configuration:** All secrets and configurations are managed via a `.env` file.
 
 ## 🗺️ Visual Workflow: How the Agent Thinks
 
@@ -94,45 +92,35 @@ flowchart TD
     I -->|refresh| Y([Force Refresh Cache])
     Y --> H
     
-    %% Data Fetching and Caching
+    %% PHASE 1: Data Fetching and Caching
     J --> K{Cache<br/>Available?}
     K -->|Yes| M([Load Cached Data])
-    K -->|No| L([Fetch Platform Data])
+    K -->|No| L([Fetch Platform Data<br/>& Download Media])
     
-    %% API & Rate Limit Handling
+    %% API & Rate Limit Handling for Fetching
     L --> L1{Rate<br/>Limited?}
     L1 -->|Yes| L2([Handle Rate Limit])
     L2 --> L5([Abort or Retry])
     L1 -->|No| L3([Extract Text & URLs])
     L3 --> L4([Save to Cache])
-    
     L4 --> M
     
-    %% Parallel Processing Paths
-    M --> N([Process Text Data])
-    M --> O([Process Media Data])
+    %% Data Consolidation Point
+    M --> N([Consolidate All<br/>Fetched Data])
     
-    %% Media Analysis Pipeline
-    O --> P([Download Media Files])
-    P --> PA{File Exists}
-    PA -->|Yes| Q1([Load existing cached File])
-    PA -->|No| Q([Image Analysis via LLM])
+    %% PHASE 2: Vision Analysis
+    N --> O{Any Images<br/>Need Analysis?}
+    O -->|Yes| P([Analyze Images via Vision LLM])
+    P --> P1([Update Cache with<br/>Vision Analysis Results])
+    P1 --> Q
+    O -->|No| Q
     
-    Q --> R([Collect Media Analysis])
-    Q1 --> R
+    %% Data Formatting & Final Synthesis
+    Q([Format Text, Links &<br/>Vision Data for LLM]) --> S([Call Text Analysis LLM<br/>with Query and All Data])
     
-    %% Text Formatting and Combining Results
-    N --> S([Format Platform Text])
-    
-    R --> T([Combine All Data])
-    S --> T
-    
-    %% Final Analysis and Output
-    T --> U([Call Analysis LLM with Query])
-    U --> V([Format Analysis Results])
-    
-    %% Auto-Save Decision
-    V --> V1{Auto-Save<br/>Enabled?}
+    %% Output Generation
+    S --> T([Format Final Report])
+    T --> V1{Auto-Save<br/>Enabled?}
     
     %% Handle Saving
     V1 -->|Yes| WA([Save Results Automatically])
@@ -142,13 +130,12 @@ flowchart TD
     WC --> H
     WB -->|No| H
     
-    %% Colorful Styling
+    %% Class Definitions for styling (no change)
     classDef startClass fill:#E8F5E8,stroke:#4CAF50,stroke-width:3px,color:#2E7D32
     classDef setupClass fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#1565C0
     classDef decisionClass fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#E65100
     classDef inputClass fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px,color:#6A1B9A
     classDef menuClass fill:#E8EAF6,stroke:#3F51B5,stroke-width:2px,color:#283593
-    
     classDef twitterClass fill:#1DA1F2,stroke:#0D47A1,stroke-width:3px,color:#FFF
     classDef redditClass fill:#FF4500,stroke:#CC3600,stroke-width:3px,color:#FFF
     classDef hnClass fill:#FF6600,stroke:#E55A00,stroke-width:3px,color:#FFF
@@ -157,55 +144,33 @@ flowchart TD
     classDef multiClass fill:#4CAF50,stroke:#388E3C,stroke-width:3px,color:#FFF
     classDef purgeClass fill:#F44336,stroke:#D32F2F,stroke-width:3px,color:#FFF
     classDef cacheStatusClass fill:#A5D6A7,stroke:#388E3C,stroke-width:2px,color:#1B5E20
-    
     classDef loopClass fill:#E1BEE7,stroke:#8E24AA,stroke-width:2px,color:#4A148C
     classDef analysisClass fill:#BBDEFB,stroke:#1976D2,stroke-width:2px,color:#0D47A1
     classDef cacheClass fill:#B2DFDB,stroke:#00695C,stroke-width:2px,color:#004D40
     classDef apiClass fill:#C8E6C9,stroke:#2E7D32,stroke-width:2px,color:#1B5E20
     classDef errorClass fill:#FFCDD2,stroke:#D32F2F,stroke-width:2px,color:#B71C1C
     classDef dataClass fill:#DCEDC8,stroke:#689F38,stroke-width:2px,color:#33691E
-    classDef textClass fill:#E1F5FE,stroke:#0288D1,stroke-width:2px,color:#01579B
-    classDef mediaClass fill:#FCE4EC,stroke:#C2185B,stroke-width:2px,color:#880E4F
     classDef llmClass fill:#FFF8E1,stroke:#FFA000,stroke-width:2px,color:#E65100
     classDef outputClass fill:#F1F8E9,stroke:#558B2F,stroke-width:2px,color:#33691E
     classDef endClass fill:#FFEBEE,stroke:#E53935,stroke-width:2px,color:#C62828
     classDef refreshClass fill:#E0F2F1,stroke:#00796B,stroke-width:2px,color:#004D40
     
     %% Apply classes to nodes
-    class A startClass
-    class AA setupClass
-    class B,D,I,K,L1,PA,V1,WB decisionClass
-    class B1,F,GA,G inputClass
-    class C menuClass
-    class E1 twitterClass
-    class E2 redditClass
-    class E3 hnClass
-    class E4 bskyClass
-    class E5 mastodonClass
-    class E6 multiClass
-    class PD purgeClass
-    class CS cacheStatusClass
-    class H loopClass
-    class J analysisClass
-    class M cacheClass
-    class L,L4 apiClass
-    class L2,L5 errorClass
-    class T dataClass
-    class N,S textClass
-    class O,P,Q1,R mediaClass
-    class Q,U llmClass
-    class V,WA,WC outputClass
-    class Z endClass
-    class Y refreshClass
+    class A startClass; class AA setupClass; class B,D,I,K,L1,O,V1,WB decisionClass
+    class C menuClass; class H loopClass; class J,P,S llmClass; class L,L4 apiClass
+    class M,P1 cacheClass; class L2,L5 errorClass; class N,Q dataClass
+    class T,WA,WC outputClass; class Z endClass; class Y refreshClass
+    class E1 twitterClass; class E2 redditClass; class E3 hnClass; class E4 bskyClass; class E5 mastodonClass; class E6 multiClass
+    class PD purgeClass; class CS cacheStatusClass; class F,GA,G inputClass; class B1 inputClass
 ```
-*Flowchart Description Note:* In **Offline Mode (`--offline`)**, the "Fetch Platform Data" step and the "Download Media File" step within the Media Analysis Pipeline are *bypassed* if the data/media is not already in the cache. Analysis proceeds only with available cached information.
+*Flowchart Description Note:* In **Offline Mode (`--offline`)**, the "Fetch Platform Data" step and the "Analyze Images" step are both *bypassed*. The analysis proceeds only with information already available in the local cache.
 </details>
 
 ## 🛠 Installation
 
 ### Prerequisites
 *   **Python 3.8+** and Pip (for local development)
-*   **Docker and Docker Compose** (recommended for stable, reproducible environment)
+*   **Docker and Docker Compose** (recommended for a stable, reproducible environment)
 
 ### Steps
 1.  **Clone the repository:**
@@ -214,7 +179,7 @@ flowchart TD
     cd owasp-social-osint-agent
     ```
 2.  **Set up Configuration (`.env` file):**
-    Create a `.env` file in the project root by copying the example below. Fill in your own API keys and credentials.
+    Create a `.env` file in the project root by copying the example. Fill in your own API keys and credentials.
 
     ```dotenv
     # .env
@@ -225,7 +190,7 @@ flowchart TD
     ANALYSIS_MODEL="your_text_analysis_model_name"
     IMAGE_ANALYSIS_MODEL="your_vision_model_name"
 
-    # --- Optional: OpenRouter Specific Headers ---
+    # --- Optional: OpenRouter Specific Headers (if using OpenRouter) ---
     # OPENROUTER_REFERER="http://localhost:3000"
     # OPENROUTER_X_TITLE="owasp-social-osint-agent"
 
@@ -272,7 +237,7 @@ This is the most stable and reproducible way to run the agent.
     ```bash
     echo '{
       "platforms": { "hackernews": ["pg"] },
-      "query": "What are Paul Graham's main interests?"
+      "query": "What are the target''s main interests?"
     }' | docker-compose run --rm -T social-osint-agent --stdin
     ```
 
@@ -280,7 +245,7 @@ This is the most stable and reproducible way to run the agent.
 
 1.  **Install dependencies:**
     ```bash
-    pip install -r requirements.txt
+    pip install -r requirements-dev.txt
     ```
 2.  **Run the script:**
     (Ensure your `.env` file is in the project root)
@@ -297,29 +262,26 @@ This is the most stable and reproducible way to run the agent.
 
 ### Special Commands (Interactive Mode)
 Within the analysis session, you can use these commands instead of an analysis query:
-*   `loadmore [<platform/user>] <count>`: Fetch additional items. If the target is unambiguous (only one user is being analyzed), you can omit `<platform/user>`. Examples: `loadmore 100`, `loadmore reddit/user123 50`.
+*   `loadmore [<platform/user>] <count>`: Fetch additional items for a target. If the target is unambiguous (only one user), you can omit `<platform/user>`. Examples: `loadmore 100`, `loadmore reddit/user123 50`.
 *   `refresh`: Re-fetch data for all targets, ignoring the 24-hour cache.
-*   `help`: Displays available commands in the analysis session.
+*   `help`: Displays available commands.
 *   `exit`: Returns to the main platform selection menu.
 
 ## ⚡ Cache System
-*   **Text/API Data:** Fetched platform data is cached for **24 hours** in `data/cache/` as JSON files (`{platform}_{username}.json`). This minimizes redundant API calls.
-*   **Media Files:** Downloaded images and media are stored in `data/media/` using hashed filenames (e.g., `{url_hash}.jpg`). These are not automatically purged but are reused if the same URL is encountered.
-*   In **Offline Mode (`--offline`)**, the cache is used as the exclusive data source. No new data is fetched, and the cache expiry is ignored.
-*   Use the `refresh` command in interactive mode to force a bypass of the cache for the current session.
-*   Use the "Purge Data" or "Cache Status" options in the main interactive menu to manage and inspect your local cache.
-
-## 🔍 Error Handling & Logging
-*   **Rate Limits:** Detects API rate limits and provides informative feedback.
-*   **API Errors:** Handles common platform-specific errors (e.g., user not found, forbidden access).
-*   **Logging:** Detailed errors and warnings are logged to `analyzer.log`. The log level can be configured using the `--log-level` argument.
+*   **Text/API Data:** Fetched platform data is cached for **24 hours** in `data/cache/` as JSON files.
+*   **Media Files:** Downloaded images and media are stored in `data/media/`.
+*   **Vision Analysis:** AI-generated image analyses are saved back into the corresponding user's cache file, preventing re-analysis of the same image.
+*   Use the `refresh` command in interactive mode to force a re-fetch of text data. Use "Purge Data" to clear media files.
 
 ## 🤖 AI Analysis Details
-*   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt. This prevents the LLM from making temporal errors due to its fixed knowledge cutoff date.
+
+*   **Efficient Architecture:** The agent uses a two-phase process. It first rapidly collects all text data and downloads media from all specified targets. Only after this data gathering is complete does it begin the vision analysis phase, ensuring network requests are not blocked by slower AI processing.
+*   **Externalized Prompts:** All prompts used to guide the LLM are stored in the `prompts/` directory. This allows for easy inspection, customization, and tuning of the agent's "brain" without changing any code.
+*   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt, preventing the LLM from making temporal errors due to its fixed knowledge cutoff date.
 *   **Data Synthesis:** The final analysis is performed by an LLM guided by a detailed system prompt. It synthesizes insights from the user's text, the linked image analyses, and the shared domain summary to build a comprehensive profile and answer the user's query.
 
 ## 🔒 Security Considerations
-*   **API Keys:** All secrets (API keys, tokens, etc.) should be stored in the `.env` file. This file should be secured and **never** committed to version control. Ensure `.env` is listed in your `.gitignore` file.
+*   **API Keys:** All secrets should be stored in the `.env` file. This file should be secured and **never** committed to version control.
 *   **Data Caching:** Fetched data and downloaded media are stored locally in the `data/` directory. Be mindful of the sensitivity of the data being analyzed and secure the directory appropriately.
 *   **Terms of Service:** Ensure your use of the tool complies with the Terms of Service of each social media platform and your chosen LLM API provider.
 
