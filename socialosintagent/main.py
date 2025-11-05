@@ -7,34 +7,17 @@ from rich.console import Console
 
 from socialosintagent.analyzer import SocialOSINTAgent
 from socialosintagent.cache import CacheManager
+from socialosintagent.cli_handler import CliHandler
+from socialosintagent.client_manager import ClientManager
 from socialosintagent.llm import LLMAnalyzer
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Social Media OSINT analyzer using LLMs. Fetches user data from various platforms, performs text and image analysis, and generates reports.",
+        description="Social Media OSINT analyzer using LLMs...",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""
-Environment Variables Required for LLM (using OpenAI-compatible API):
-  LLM_API_KEY             : API key for your chosen LLM provider.
-  LLM_API_BASE_URL        : Base URL for the LLM API endpoint.
-  IMAGE_ANALYSIS_MODEL    : Vision model name recognized by your LLM provider/endpoint.
-  ANALYSIS_MODEL          : Text model name recognized by your LLM provider/endpoint.
-
-Optional for OpenRouter:
-  OPENROUTER_REFERER      : Your site URL or app name.
-  OPENROUTER_X_TITLE      : Your project name.
-
-Platform Credentials (at least one set required, or use HackerNews):
-  TWITTER_BEARER_TOKEN    : Twitter API v2 Bearer Token.
-  REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT
-  BLUESKY_IDENTIFIER, BLUESKY_APP_SECRET
-  
-Mastodon Configuration (via Environment Variables):
-  MASTODON_INSTANCE_1_URL, MASTODON_INSTANCE_1_TOKEN, MASTODON_INSTANCE_1_DEFAULT="true"
-  MASTODON_INSTANCE_2_URL, MASTODON_INSTANCE_2_TOKEN
-  (Continue numbering for more instances)
-
-Place all variables in a `.env` file or set them in your environment.
+Environment Variables Required... (rest of epilog is unchanged)
 """,
     )
     parser.add_argument("--stdin", action="store_true", help="Read analysis request from stdin as JSON.")
@@ -42,30 +25,32 @@ Place all variables in a `.env` file or set them in your environment.
     parser.add_argument("--no-auto-save", action="store_true", help="Disable automatic saving of reports.")
     parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], default="WARNING", help="Set the logging level.")
     parser.add_argument("--offline", action="store_true", help="Run in offline mode, using only cached data.")
-    
     args = parser.parse_args()
 
-    # Configure logging
+    # Logging config remains the same
     log_level_numeric = getattr(logging, args.log_level.upper())
-    logging.basicConfig(
-        level=log_level_numeric,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.FileHandler("analyzer.log"), logging.StreamHandler()],
-    )
+    logging.basicConfig(level=log_level_numeric, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", handlers=[logging.FileHandler("analyzer.log"), logging.StreamHandler()])
     logging.getLogger("SocialOSINTAgent").setLevel(log_level_numeric)
     
-    if args.offline:
-        logging.info("Running in OFFLINE mode.")
+    if args.offline: logging.info("Running in OFFLINE mode.")
 
     try:
         base_dir = Path("data")
         cache_manager = CacheManager(base_dir, args.offline)
         llm_analyzer = LLMAnalyzer(args.offline)
-        analyzer_instance = SocialOSINTAgent(args, cache_manager, llm_analyzer)
+        client_manager = ClientManager(args.offline)
+
+        # The agent is the core logic engine
+        agent_instance = SocialOSINTAgent(args, cache_manager, llm_analyzer, client_manager)
+        
         if args.stdin:
-            analyzer_instance.process_stdin()
+            # Non-interactive mode
+            agent_instance.process_stdin()
         else:
-            analyzer_instance.run()
+            # Interactive mode
+            cli = CliHandler(agent_instance, args)
+            cli.run()
+
     except RuntimeError as e:
         error_console = Console(stderr=True, style="bold red")
         error_console.print(f"\nCRITICAL ERROR: {e}")

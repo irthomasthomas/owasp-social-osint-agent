@@ -21,8 +21,7 @@ logger = logging.getLogger("SocialOSINTAgent.utils")
 REQUEST_TIMEOUT = 20.0
 SUPPORTED_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif"]
 # A reasonably good regex for finding URLs in text
-URL_REGEX = r'(?:(?:https?|ftp):\/\/)?[\w/\-?=%.]+\.[\w/\-?=%.]+'
-
+URL_REGEX = re.compile(r'((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:\'".,<>?«»“”‘’]))')
 
 class DateTimeEncoder(json.JSONEncoder):
     """JSON encoder to handle datetime objects."""
@@ -63,7 +62,8 @@ def extract_and_resolve_urls(text: str) -> List[str]:
     if not text:
         return []
     # Find all potential URLs in the text
-    return re.findall(URL_REGEX, text, re.IGNORECASE)
+    matches = URL_REGEX.findall(text)
+    return [match[0] for match in matches]
 
 def handle_rate_limit(console, platform_context: str, exception: Exception):
     """Handles rate limit exceptions by logging and printing a rich panel."""

@@ -1,27 +1,31 @@
-# --- Python Artifacts ---
+# Python Artifacts
 # Ignore the Python bytecode cache directory and files.
 __pycache__/
 *.pyc
 *.pyo
 
-# --- Virtual Environments ---
+# Pytest cache
+.pytest_cache/
+
+# Virtual Environments
 # Ignore common Python virtual environment directories.
 venv/
 .venv/
 env/
 *_env/
 
-# --- Project-Generated Data & Logs ---
-# These are created at runtime and should not be in version control.
+# Project-Generated Data & Logs
+# The data/ directory contains all runtime-generated content.
+# The leading slash makes it specific to the project root.
 /data/
 analyzer.log
 *.log
 
-# --- Secrets and Local Configuration ---
+# Secrets and Local Configuration
 # CRITICAL: Ignore the .env file containing all API keys and secrets.
 .env
 
-# --- IDE / Editor Specific Files ---
+# IDE / Editor Specific Files
 # Ignore user-specific settings from common editors.
 .vscode/
 .idea/
@@ -31,6 +35,6 @@ analyzer.log
 *.sln
 *.sw?
 
-# --- Local Input Files ---
+# Local Input Files
 # Ignore temporary files used for stdin.
 input.json

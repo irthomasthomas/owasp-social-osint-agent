@@ -3,17 +3,15 @@ import collections
 import json
 import logging
 import os
-import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
 from openai import (APIError, AuthenticationError, BadRequestError, OpenAI,
                     RateLimitError)
-from openai.types.chat import ChatCompletion
 from PIL import Image
 
 from .exceptions import RateLimitExceededError
@@ -22,14 +20,25 @@ from .utils import (SUPPORTED_IMAGE_EXTENSIONS, extract_and_resolve_urls,
 
 logger = logging.getLogger("SocialOSINTAgent.llm")
 
+# Helper to load prompts safely
+def _load_prompt(filename: str) -> str:
+    try:
+        prompt_path = Path("prompts") / filename
+        return prompt_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        logger.error(f"CRITICAL: Prompt file not found at {prompt_path}")
+        raise
+    except Exception as e:
+        logger.error(f"CRITICAL: Failed to load prompt file {prompt_path}: {e}")
+        raise
 
 class LLMAnalyzer:
-    _llm_completion_object: Optional[ChatCompletion] = None
-    _llm_api_exception: Optional[Exception] = None
-
     def __init__(self, is_offline: bool):
         self.is_offline = is_offline
         self._llm_client_instance: Optional[OpenAI] = None
+        # Load prompts on initialization
+        self.system_analysis_prompt_template = _load_prompt("system_analysis.prompt")
+        self.image_analysis_prompt_template = _load_prompt("image_analysis.prompt")
 
     @property
     def client(self) -> OpenAI:
@@ -56,19 +65,6 @@ class LLMAnalyzer:
             except Exception as e:
                 raise RuntimeError(f"Failed to initialize LLM client: {e}")
         return self._llm_client_instance
-
-    def _call_llm_api(self, model_name: str, messages: list, max_tokens: int, temperature: float):
-        """Helper method to make the LLM API call, designed to be run in a thread."""
-        self._llm_completion_object = None
-        self._llm_api_exception = None
-        try:
-            self._llm_completion_object = self.client.chat.completions.create(
-                model=model_name, messages=messages, max_tokens=max_tokens, temperature=temperature
-            )
-        except APIError as e:
-            self._llm_api_exception = e
-        except Exception as e:
-            self._llm_api_exception = e
 
     def analyze_image(self, file_path: Path, source_url: str, context: str = "") -> Optional[str]:
         if self.is_offline:
@@ -105,17 +101,7 @@ class LLMAnalyzer:
             base64_image = base64.b64encode(analysis_file_path.read_bytes()).decode("utf-8")
             image_data_url = f"data:image/jpeg;base64,{base64_image}"
 
-            prompt_text = (
-                f"Perform an objective OSINT analysis of this image originating from {context}. Focus *only* on visually verifiable elements relevant to profiling or context understanding. Describe:\n"
-                "- **Setting/Environment:** (e.g., Indoor office, outdoor urban street, natural landscape, specific room type if identifiable). Note weather, time of day clues, architecture if distinctive.\n"
-                "- **Key Objects/Items:** List prominent or unusual objects. If text/logos are clearly legible (e.g., book titles, brand names on products, signs), state them exactly. Note technology types, tools, personal items.\n"
-                "- **People (if present):** Describe observable characteristics: approximate number, general attire, estimated age range (e.g., child, adult, senior), ongoing activity. *Do not guess identities or relationships.*\n"
-                "- **Text/Symbols:** Transcribe any clearly readable text on signs, labels, clothing, etc. Describe distinct symbols or logos.\n"
-                "- **Activity/Event:** Describe the apparent action (e.g., person working at desk, group dining, attending rally, specific sport).\n"
-                "- **Implicit Context Indicators:** Note subtle clues like reflections revealing unseen elements, background details suggesting location (e.g., specific landmarks, regional flora), or object condition suggesting usage/age.\n"
-                "- **Overall Scene Impression:** Summarize the visual narrative (e.g., professional setting, casual gathering, technical workshop, artistic expression, political statement).\n\n"
-                "Output a concise, bulleted list of observations. Avoid assumptions, interpretations, or emotional language not directly supported by the visual evidence."
-            )
+            prompt_text = self.image_analysis_prompt_template.format(context=context)
             model = os.environ["IMAGE_ANALYSIS_MODEL"]
             completion = self.client.chat.completions.create(
                 model=model,
@@ -123,10 +109,8 @@ class LLMAnalyzer:
                 max_tokens=1024,
             )
             analysis_text = completion.choices[0].message.content.strip() if completion.choices[0].message.content else None
-            if not analysis_text:
-                return None
+            if not analysis_text: return None
             
-            # **CHANGE**: Format the output to be more structured and explicit.
             return f"- **Image Source:** [{source_url}]({source_url})\n- **Analysis:**\n{analysis_text}"
 
         except APIError as e:
@@ -140,8 +124,7 @@ class LLMAnalyzer:
             if temp_path and temp_path.exists(): temp_path.unlink()
 
     def _format_text_data(self, platform: str, username: str, data: dict) -> str:
-        """Formats fetched data into a detailed text summary for the LLM."""
-
+        # This method's logic remains the same as before.
         MAX_ITEMS_PER_TYPE = 25
         TEXT_SNIPPET_LENGTH = 750
         if not data: return ""
@@ -174,7 +157,7 @@ class LLMAnalyzer:
         if platform == "twitter" and data.get("tweets"):
             output.append(f"\n**Recent Tweets (up to {MAX_ITEMS_PER_TYPE}):**")
             for i, t in enumerate(data["tweets"][:MAX_ITEMS_PER_TYPE]):
-                if t is not None:  # Null check for tweets
+                if t is not None:
                     ts = get_sort_key(t, "created_at").strftime("%Y-%m-%d")
                     info = []
                     if t.get("replied_to_user_info"): info.append(f"Reply to @{t['replied_to_user_info']['username']}")
@@ -187,20 +170,20 @@ class LLMAnalyzer:
             if data.get("submissions"):
                 output.append(f"\n**Recent Submissions (up to {MAX_ITEMS_PER_TYPE}):**")
                 for i, s in enumerate(data["submissions"][:MAX_ITEMS_PER_TYPE]):
-                    if s is not None:  # Null check for submissions
+                    if s is not None:
                         ts = get_sort_key(s, "created_utc").strftime("%Y-%m-%d")
                         output.append(f"- Submission {i+1} in r/{s.get('subreddit','?')} ({ts}):\n  Title: {s.get('title')}\n  Score: {s.get('score',0)}")
             if data.get("comments"):
                 output.append(f"\n**Recent Comments (up to {MAX_ITEMS_PER_TYPE}):**")
                 for i, c in enumerate(data["comments"][:MAX_ITEMS_PER_TYPE]):
-                    if c is not None:  # Null check for comments
+                    if c is not None:
                         ts = get_sort_key(c, "created_utc").strftime("%Y-%m-%d")
                         text = c.get("text","")[:TEXT_SNIPPET_LENGTH]
                         output.append(f"- Comment {i+1} in r/{c.get('subreddit','?')} ({ts}):\n  Content: {text}\n  Score: {c.get('score',0)}")
         elif platform == "mastodon" and data.get("posts"):
             output.append(f"\n**Recent Posts (up to {MAX_ITEMS_PER_TYPE}):**")
             for i, p in enumerate(data["posts"][:MAX_ITEMS_PER_TYPE]):
-                if p is not None:  # Null check for posts
+                if p is not None:
                     ts = get_sort_key(p, "created_at").strftime("%Y-%m-%d")
                     info = ["Boost"] if p.get("is_reblog") else []
                     if p.get("media"): info.append(f"Media: {len(p['media'])}")
@@ -211,103 +194,58 @@ class LLMAnalyzer:
         return "\n".join(output)
 
     def _analyze_shared_links(self, platforms_data: Dict[str, List[Dict]]) -> str:
-        """Extracts all external links, counts domains, and returns a markdown summary."""
+        # This method's logic remains the same as before.
         all_urls = []
-        platform_domains = {
-            "twitter.com", "x.com", "t.co", "reddit.com", "redd.it", "bsky.app",
-            "news.ycombinator.com", "youtube.com", "youtu.be" # Exclude youtube as it's too common
-        }
+        platform_domains = {"twitter.com", "x.com", "t.co", "reddit.com", "redd.it", "bsky.app", "news.ycombinator.com", "youtube.com", "youtu.be"}
 
         try:
             for platform, user_data_list in platforms_data.items():
-                if not isinstance(user_data_list, list):
-                    continue
-                    
+                if not isinstance(user_data_list, list): continue
                 for user_data in user_data_list:
-                    if not isinstance(user_data, dict):
-                        continue
-                        
+                    if not isinstance(user_data, dict): continue
                     data = user_data.get("data", {})
-                    if not isinstance(data, dict):
-                        continue
-                    
+                    if not isinstance(data, dict): continue
                     if platform == "twitter":
-                        tweets = data.get("tweets", [])
-                        if not isinstance(tweets, list):
-                            continue
-                        
-                        for t in tweets:
-                            # Multiple levels of safety checks
-                            if t is None or not isinstance(t, dict):
-                                continue
-                            
-                            entities_raw = t.get("entities_raw")
-                            if entities_raw is None or not isinstance(entities_raw, dict):
-                                continue
-                                
-                            urls = entities_raw.get("urls")
-                            if urls is None or not isinstance(urls, list):
-                                continue
-                                
-                            for url_entity in urls:
-                                if isinstance(url_entity, dict) and "expanded_url" in url_entity:
-                                    all_urls.append(url_entity["expanded_url"])
-                                    
+                        tweets = data.get("tweets", []);
+                        if isinstance(tweets, list):
+                            for t in tweets:
+                                if t and isinstance(t, dict) and t.get("entities_raw") and isinstance(t["entities_raw"], dict) and t["entities_raw"].get("urls") and isinstance(t["entities_raw"]["urls"], list):
+                                    for url_entity in t["entities_raw"]["urls"]:
+                                        if isinstance(url_entity, dict) and "expanded_url" in url_entity: all_urls.append(url_entity["expanded_url"])
                     elif platform == "reddit":
-                        submissions = data.get("submissions", [])
+                        submissions = data.get("submissions", []);
                         if isinstance(submissions, list):
                             for s in submissions:
-                                if s is not None and isinstance(s, dict):
-                                    if s.get("link_url"): 
-                                        all_urls.append(s["link_url"])
-                                    if s.get("text"): 
-                                        all_urls.extend(extract_and_resolve_urls(s["text"]))
-                        
-                        comments = data.get("comments", [])
+                                if s and isinstance(s, dict):
+                                    if s.get("link_url"): all_urls.append(s["link_url"])
+                                    if s.get("text"): all_urls.extend(extract_and_resolve_urls(s["text"]))
+                        comments = data.get("comments", []);
                         if isinstance(comments, list):
                             for c in comments:
-                                if c is not None and isinstance(c, dict):
-                                    if c.get("text"): 
-                                        all_urls.extend(extract_and_resolve_urls(c["text"]))
-                                        
+                                if c and isinstance(c, dict):
+                                    if c.get("text"): all_urls.extend(extract_and_resolve_urls(c["text"]))
                     elif platform == "hackernews":
-                        items = data.get("items", [])
+                        items = data.get("items", []);
                         if isinstance(items, list):
                             for i in items:
-                                if i is not None and isinstance(i, dict):
-                                    if i.get("url"): 
-                                        all_urls.append(i["url"])
-                                    if i.get("text"): 
-                                        all_urls.extend(extract_and_resolve_urls(i["text"]))
-                                        
-                    else: # Generic text extraction for Bluesky, Mastodon
-                        posts = data.get("posts", [])
+                                if i and isinstance(i, dict):
+                                    if i.get("url"): all_urls.append(i["url"])
+                                    if i.get("text"): all_urls.extend(extract_and_resolve_urls(i["text"]))
+                    else:
+                        posts = data.get("posts", []);
                         if isinstance(posts, list):
                             for p in posts:
-                                if p is not None and isinstance(p, dict):
-                                    if p.get("text"): 
-                                        all_urls.extend(extract_and_resolve_urls(p["text"]))
-                                    if p.get("text_cleaned"): 
-                                        all_urls.extend(extract_and_resolve_urls(p["text_cleaned"]))
-
+                                if p and isinstance(p, dict):
+                                    if p.get("text"): all_urls.extend(extract_and_resolve_urls(p["text"]))
+                                    if p.get("text_cleaned"): all_urls.extend(extract_and_resolve_urls(p["text_cleaned"]))
         except Exception as e:
             logger.error(f"Error in _analyze_shared_links: {e}", exc_info=True)
-            return ""  # Return empty string instead of crashing
-
-        if not all_urls:
             return ""
 
-        domain_counts = collections.Counter()
-        for url in all_urls:
-            try:
-                domain = urlparse(url).netloc.replace("www.", "")
-                if domain and domain not in platform_domains:
-                    domain_counts[domain] += 1
-            except Exception:
-                continue
+        if not all_urls: return ""
 
-        if not domain_counts:
-            return ""
+        domain_counts = collections.Counter(urlparse(url).netloc.replace("www.", "") for url in all_urls if urlparse(url).netloc and urlparse(url).netloc.replace("www.", "") not in platform_domains)
+        if not domain_counts: return ""
 
         output = ["## Top Shared Domains"]
         for domain, count in domain_counts.most_common(10):
@@ -326,6 +264,8 @@ class LLMAnalyzer:
                 username = user_data.get("username_key", "unknown")
                 summary = self._format_text_data(platform, username, user_data["data"])
                 if summary: collected_summaries.append(summary)
+                
+                # The media analyses are now populated by the analyzer, so this works
                 media_analyses = [ma for ma in user_data["data"].get("media_analysis", []) if ma]
                 if media_analyses: all_media_analyses.extend(media_analyses)
         
@@ -343,45 +283,24 @@ class LLMAnalyzer:
         if collected_summaries:
             components.append("## Collected Textual & Activity Data Summary:\n\n" + "\n\n---\n\n".join(collected_summaries))
         
-        system_prompt = f"""**Objective:** Generate a comprehensive behavioral and linguistic profile based on the provided social media data, employing structured analytic techniques focused on objectivity, evidence-based reasoning, and clear articulation.
-
-**IMPORTANT CONTEXT: The current date and time for this analysis is {current_ts_str}.** All dates in the provided data should be interpreted relative to this timestamp.
-
-**Input:** You will receive summaries of user activity, itemized/linked descriptive analyses of images, and a summary of top shared external domains. The user will provide a specific analysis query.
-
-**Primary Task:** Address the user's specific analysis query using ALL the data provided (text, image analyses, and shared domains) and the analytical framework below.
-
-**Analysis Domains (Use these to structure your thinking and response where relevant to the query):**
-1.  **Behavioral Patterns:** Analyze interaction frequency, platform-specific activity, and temporal communication rhythms.
-2.  **Semantic Content & Themes:** Identify recurring topics, keywords, and concepts. Analyze linguistic indicators like sentiment/tone and cognitive framing.
-3.  **Interests & Network Context:** Deduce primary interests, hobbies, or professional domains. Use the **Shared Domain Analysis** to identify primary information sources. Note interaction patterns visible *within the provided posts*.
-4.  **Communication Style:** Assess linguistic complexity, use of jargon/slang, and markers of emotional expression.
-5.  **Network Connections:** Systematically list all mentioned, replied-to, or boosted/retweeted accounts found in the data, noting the nature of the interaction.
-6.  **Visual Data Integration:** Explicitly incorporate insights derived from the provided image analyses.
-
-**Analytical Constraints & Guidelines:**
-*   **Temporal Awareness:** Use the provided current date to correctly interpret the timeline of events. Do not rely on your internal knowledge cutoff date.
-*   **Image Link Preservation:** When citing evidence from a specific image, you MUST include the original clickable Markdown link to the `Image Source` exactly as provided. This is critical for report verifiability. DO NOT remove the link or reference the image only by its filename.
-*   **Evidence-Based:** Ground ALL conclusions *strictly and exclusively* on the provided source materials (text summaries, image analyses, and the shared domain list).
-*   **Objectivity & Neutrality:** Maintain analytical neutrality. Avoid speculation, moral judgments, or personal opinions not present in the data.
-*   **Synthesize, Don't Just List:** Integrate findings from different platforms and data types into a coherent narrative that addresses the query.
-*   **Address the Query Directly:** Structure your response primarily around answering the user's specific question(s).
-*   **Acknowledge Limitations:** If the data is sparse, lacks specific details, or if certain data types were unavailable/unprocessed, explicitly state these limitations.
-
-**Output:** A structured analytical report that directly addresses the user's query, rigorously supported by evidence from the provided text, image, and link data, adhering to all constraints.
-"""
-        
+        system_prompt = self.system_analysis_prompt_template.format(current_timestamp=current_ts_str)
         user_prompt = f"**Analysis Query:** {query}\n\n**Provided Data:**\n\n" + "\n\n===\n\n".join(components)
         
         text_model = os.environ["ANALYSIS_MODEL"]
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
-        api_thread = threading.Thread(target=self._call_llm_api, kwargs={"model_name": text_model, "messages": messages, "max_tokens": 3500, "temperature": 0.5})
-        api_thread.start()
-        api_thread.join()
-
-        if self._llm_api_exception:
-            raise RuntimeError(f"LLM API request failed") from self._llm_api_exception
-        if not self._llm_completion_object or not self._llm_completion_object.choices:
-            raise RuntimeError("LLM API call returned no completion.")
         
-        return self._llm_completion_object.choices[0].message.content or ""
+        # --- REFACTOR: REMOVED THREADING, DIRECT CALL ---
+        try:
+            completion = self.client.chat.completions.create(
+                model=text_model, messages=messages, max_tokens=3500, temperature=0.5
+            )
+            if not completion or not completion.choices:
+                raise RuntimeError("LLM API call returned no completion.")
+            
+            return completion.choices[0].message.content or ""
+        except APIError as e:
+            logger.error(f"LLM API error during text analysis: {e}")
+            raise RuntimeError(f"LLM API request failed: {e}") from e
+        except Exception as e:
+            logger.error(f"Unexpected error during text analysis: {e}", exc_info=True)
+            raise RuntimeError(f"An unexpected error occurred during LLM analysis: {e}") from e
