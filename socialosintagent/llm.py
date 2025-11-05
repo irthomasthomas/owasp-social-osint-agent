@@ -21,9 +21,13 @@ from .utils import (SUPPORTED_IMAGE_EXTENSIONS, extract_and_resolve_urls,
 logger = logging.getLogger("SocialOSINTAgent.llm")
 
 # Helper to load prompts safely
+_CURRENT_DIR = Path(__file__).parent
+
 def _load_prompt(filename: str) -> str:
+    """Loads a prompt file from the 'prompts' directory within this module."""
     try:
-        prompt_path = Path("prompts") / filename
+        # Construct a path relative to the current file's location.
+        prompt_path = _CURRENT_DIR / "prompts" / filename
         return prompt_path.read_text(encoding="utf-8")
     except FileNotFoundError:
         logger.error(f"CRITICAL: Prompt file not found at {prompt_path}")

@@ -15,8 +15,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application's code into the container
 COPY ./socialosintagent ./socialosintagent
 
-# Copy the prompts directory into the container
-COPY ./prompts ./prompts
-
 # Set the entrypoint to run the main module
 CMD ["python", "-m", "socialosintagent.main"]
