@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import pytest
 
 from socialosintagent import utils
 

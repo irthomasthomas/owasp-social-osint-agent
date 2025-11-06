@@ -1,11 +1,11 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import praw
 import prawcore
 
-from ..cache import CACHE_EXPIRY_HOURS, MAX_CACHE_ITEMS, CacheManager
+from ..cache import MAX_CACHE_ITEMS, CacheManager
 from ..exceptions import (AccessForbiddenError, RateLimitExceededError,
                          UserNotFoundError)
 from ..utils import SUPPORTED_IMAGE_EXTENSIONS, download_media, get_sort_key
@@ -48,7 +48,7 @@ def fetch_data(
     
     cached_subs_count = len(cached_data.get("submissions", [])) if cached_data else 0
     cached_comms_count = len(cached_data.get("comments", [])) if cached_data else 0
-    if not force_refresh and cached_data and (datetime.now(timezone.utc) - get_sort_key(cached_data, "timestamp")) < timedelta(hours=CACHE_EXPIRY_HOURS):
+    if not force_refresh and cached_data:
         if cached_subs_count >= fetch_limit and cached_comms_count >= fetch_limit:
             return cached_data
 

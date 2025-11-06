@@ -1,14 +1,12 @@
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, cast
-from urllib.parse import quote_plus, urlparse
+from typing import Any, Dict, Optional, cast
+from urllib.parse import quote_plus
 
 from atproto import Client, exceptions as atproto_exceptions
 
-from ..cache import CACHE_EXPIRY_HOURS, MAX_CACHE_ITEMS, CacheManager
-from ..exceptions import (AccessForbiddenError, RateLimitExceededError,
-                         UserNotFoundError)
-from ..utils import SUPPORTED_IMAGE_EXTENSIONS, download_media, get_sort_key
+from ..cache import MAX_CACHE_ITEMS, CacheManager
+from ..exceptions import (UserNotFoundError)
+from ..utils import download_media, get_sort_key
 
 logger = logging.getLogger("SocialOSINTAgent.platforms.bluesky")
 
@@ -28,7 +26,7 @@ def fetch_data(
         return cached_data
 
     cached_posts_count = len(cached_data.get("posts", [])) if cached_data else 0
-    if not force_refresh and cached_data and (datetime.now(timezone.utc) - get_sort_key(cached_data, "timestamp")) < timedelta(hours=CACHE_EXPIRY_HOURS):
+    if not force_refresh and cached_data:
         if cached_posts_count >= fetch_limit:
             return cached_data
 

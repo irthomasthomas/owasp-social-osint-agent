@@ -45,7 +45,6 @@ def test_fetch_data_cache_miss(mock_tweepy_client, mock_cache):
     username = "testuser"
 
     # Act
-    # REFACTOR: The llm argument is removed from the call
     result = twitter_fetcher.fetch_data(
         client=mock_tweepy_client,
         username=username,
@@ -63,20 +62,19 @@ def test_fetch_data_cache_miss(mock_tweepy_client, mock_cache):
     assert len(result["tweets"]) == 1
     assert result["tweets"][0]["text"] == "Hello world!"
 
-def test_fetch_data_cache_hit_fresh(mock_tweepy_client, mock_cache):
-    """Test fetch_data when a fresh cache exists."""
+def test_fetch_data_cache_hit_insufficient_items(mock_tweepy_client, mock_cache):
+    """Test that the API is called when the cache has fewer items than requested."""
     # Arrange
-    fresh_data = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+    insufficient_cached_data = {
         "user_info": {"id": "123"},
-        "tweets": [{"id": "t1"}] * 50,
+        "tweets": [{"id": f"t{i}"} for i in range(20)],
     }
-    mock_cache.load.return_value = fresh_data
+    mock_cache.load.return_value = insufficient_cached_data
+    mock_cache.is_offline = False # Explicitly set is_offline to False
     username = "testuser"
 
     # Act
-    # REFACTOR: The llm argument is removed
-    result = twitter_fetcher.fetch_data(
+    twitter_fetcher.fetch_data(
         client=mock_tweepy_client,
         username=username,
         cache=mock_cache,
@@ -86,9 +84,9 @@ def test_fetch_data_cache_hit_fresh(mock_tweepy_client, mock_cache):
 
     # Assert
     mock_cache.load.assert_called_once_with("twitter", username)
+    mock_tweepy_client.get_users_tweets.assert_called_once()
     mock_tweepy_client.get_user.assert_not_called()
-    mock_tweepy_client.get_users_tweets.assert_not_called()
-    assert result == fresh_data
+    mock_cache.save.assert_called_once()
 
 def test_user_not_found(mock_tweepy_client, mock_cache):
     """Test that UserNotFoundError is raised for a non-existent user."""
@@ -100,7 +98,6 @@ def test_user_not_found(mock_tweepy_client, mock_cache):
 
     # Act & Assert
     with pytest.raises(UserNotFoundError):
-        # REFACTOR: The llm argument is removed
         twitter_fetcher.fetch_data(
             client=mock_tweepy_client,
             username=username,

@@ -5,12 +5,11 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 import httpx
-from bs4 import BeautifulSoup
-from openai import (APIError, AuthenticationError, BadRequestError, OpenAI,
+from openai import (APIError, OpenAI,
                     RateLimitError)
 from PIL import Image
 
@@ -210,33 +209,33 @@ class LLMAnalyzer:
                     data = user_data.get("data", {})
                     if not isinstance(data, dict): continue
                     if platform == "twitter":
-                        tweets = data.get("tweets", []);
+                        tweets = data.get("tweets", [])
                         if isinstance(tweets, list):
                             for t in tweets:
                                 if t and isinstance(t, dict) and t.get("entities_raw") and isinstance(t["entities_raw"], dict) and t["entities_raw"].get("urls") and isinstance(t["entities_raw"]["urls"], list):
                                     for url_entity in t["entities_raw"]["urls"]:
                                         if isinstance(url_entity, dict) and "expanded_url" in url_entity: all_urls.append(url_entity["expanded_url"])
                     elif platform == "reddit":
-                        submissions = data.get("submissions", []);
+                        submissions = data.get("submissions", [])
                         if isinstance(submissions, list):
                             for s in submissions:
                                 if s and isinstance(s, dict):
                                     if s.get("link_url"): all_urls.append(s["link_url"])
                                     if s.get("text"): all_urls.extend(extract_and_resolve_urls(s["text"]))
-                        comments = data.get("comments", []);
+                        comments = data.get("comments", [])
                         if isinstance(comments, list):
                             for c in comments:
                                 if c and isinstance(c, dict):
                                     if c.get("text"): all_urls.extend(extract_and_resolve_urls(c["text"]))
                     elif platform == "hackernews":
-                        items = data.get("items", []);
+                        items = data.get("items", [])
                         if isinstance(items, list):
                             for i in items:
                                 if i and isinstance(i, dict):
                                     if i.get("url"): all_urls.append(i["url"])
                                     if i.get("text"): all_urls.extend(extract_and_resolve_urls(i["text"]))
                     else:
-                        posts = data.get("posts", []);
+                        posts = data.get("posts", [])
                         if isinstance(posts, list):
                             for p in posts:
                                 if p and isinstance(p, dict):

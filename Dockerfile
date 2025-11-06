@@ -4,6 +4,9 @@ FROM python:3.11-slim
 # Set the working directory in the container
 WORKDIR /app
 
+# Create necessary directories for data, logs, and outputs within the image.
+RUN mkdir -p /app/data /app/logs
+
 # Copy the requirements file into the container
 # This is done first to leverage Docker's layer caching.
 COPY requirements.txt .

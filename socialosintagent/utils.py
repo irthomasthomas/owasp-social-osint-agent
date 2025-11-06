@@ -3,14 +3,12 @@ import json
 import logging
 import re
 import unicodedata
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
 
 import httpx
 from openai import RateLimitError
-from PIL import Image
 from rich.panel import Panel
 
 from .exceptions import RateLimitExceededError
@@ -69,7 +67,6 @@ def handle_rate_limit(console, platform_context: str, exception: Exception):
     """Handles rate limit exceptions by logging and printing a rich panel."""
     error_message = f"{platform_context} API rate limit exceeded."
     reset_info = ""
-    wait_seconds = 900  # Default 15 minutes
 
     if isinstance(exception, RateLimitError):  # LLM rate limits
         error_message = f"LLM API ({platform_context}) rate limit exceeded."

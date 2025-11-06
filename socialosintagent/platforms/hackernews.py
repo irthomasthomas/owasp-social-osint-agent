@@ -1,12 +1,12 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import quote_plus
 
 import httpx
 from bs4 import BeautifulSoup
 
-from ..cache import CACHE_EXPIRY_HOURS, MAX_CACHE_ITEMS, CacheManager
+from ..cache import MAX_CACHE_ITEMS, CacheManager
 from ..exceptions import RateLimitExceededError, UserNotFoundError
 from ..utils import get_sort_key
 
@@ -28,7 +28,7 @@ def fetch_data(
     if cache.is_offline:
         return cached_data
 
-    if not force_refresh and cached_data and (datetime.now(timezone.utc) - get_sort_key(cached_data, "timestamp")) < timedelta(hours=CACHE_EXPIRY_HOURS):
+    if not force_refresh and cached_data:
         if len(cached_data.get("items", [])) >= fetch_limit:
             return cached_data
 

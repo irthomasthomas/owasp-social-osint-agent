@@ -72,8 +72,8 @@ class CacheManager:
                 logger.info(f"Cache hit and valid (fresh) for {platform}/{username}")
                 return data
             else:
-                logger.info(f"Cache expired for {platform}/{username}. Returning stale data for incremental baseline.")
-                return data
+                logger.info(f"Cache expired for {platform}/{username}. Discarding.")
+                return None
 
         except (json.JSONDecodeError, KeyError, FileNotFoundError) as e:
             logger.warning(f"Failed to load or parse cache for {platform}/{username}: {e}. Discarding cache.")

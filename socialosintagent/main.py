@@ -1,5 +1,6 @@
 import argparse
 import logging
+from dotenv import load_dotenv
 import sys
 from pathlib import Path
 
@@ -13,6 +14,14 @@ from socialosintagent.llm import LLMAnalyzer
 
 
 def main():
+    load_dotenv()
+
+    # Define the logs directory path and ensure it exists.
+    # This makes the application work correctly even when run locally without Docker.
+    logs_dir = Path("logs")
+    logs_dir.mkdir(exist_ok=True)
+    log_file_path = logs_dir / "analyzer.log"
+
     parser = argparse.ArgumentParser(
         description="Social Media OSINT analyzer using LLMs...",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -27,9 +36,10 @@ Environment Variables Required... (rest of epilog is unchanged)
     parser.add_argument("--offline", action="store_true", help="Run in offline mode, using only cached data.")
     args = parser.parse_args()
 
-    # Logging config remains the same
     log_level_numeric = getattr(logging, args.log_level.upper())
-    logging.basicConfig(level=log_level_numeric, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", handlers=[logging.FileHandler("analyzer.log"), logging.StreamHandler()])
+    
+    logging.basicConfig(level=log_level_numeric, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", handlers=[logging.FileHandler(log_file_path), logging.StreamHandler()])
+    
     logging.getLogger("SocialOSINTAgent").setLevel(log_level_numeric)
     
     if args.offline: logging.info("Running in OFFLINE mode.")

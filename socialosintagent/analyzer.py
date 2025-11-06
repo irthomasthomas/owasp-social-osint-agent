@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.text import Text
 
 from .cache import CacheManager
 from .client_manager import ClientManager
@@ -155,41 +154,66 @@ class SocialOSINTAgent:
                 console.print(f"- {p}/{u}: {r}")
 
     def _perform_vision_analysis(self, collected_data, console):
-        media_to_analyze = []
+        
+        # Phase 1: Count all images that need analysis to set up the progress bar accurately.
+        total_media_to_analyze = 0
+        all_media_items = []
+
         for platform, users_data in collected_data.items():
             for user_data in users_data:
-                # This complex lookup is to handle different data structures
-                data_items = user_data.get('data', {}).get('tweets') or \
-                             user_data.get('data', {}).get('posts') or \
-                             user_data.get('data', {}).get('submissions') or \
-                             user_data.get('data', {}).get('items', [])
+                data_items = (
+                    user_data.get('data', {}).get('tweets') or
+                    user_data.get('data', {}).get('posts') or
+                    user_data.get('data', {}).get('submissions') or
+                    user_data.get('data', {}).get('items', [])
+                )
                 
                 for item in data_items:
-                    if not item or 'media' not in item: continue
+                    if not item or 'media' not in item:
+                        continue
                     for media_item in item['media']:
-                        if not media_item: continue
+                        if not media_item:
+                            continue
                         path_str = media_item.get('local_path')
+                        # Only count images that exist and have not already been analyzed.
                         if path_str and not media_item.get('analysis'):
                             path = Path(path_str)
                             if path.exists() and path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS:
-                                media_to_analyze.append((media_item, user_data.get('username_key', 'unknown'), platform))
+                                total_media_to_analyze += 1
+                                # Store a reference to the media item and its parent user_data
+                                all_media_items.append((media_item, user_data))
 
-        if not media_to_analyze:
+        if not all_media_items:
             return
 
+        # Phase 2: Perform the analysis with a correct progress bar.
         with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True, console=console) as progress:
-            task = progress.add_task("[cyan]Analyzing images...", total=len(media_to_analyze))
-            for media_item, username, platform in media_to_analyze:
+            task = progress.add_task("[cyan]Analyzing images...", total=total_media_to_analyze)
+            
+            for media_item, user_data in all_media_items:
+                platform = next(p for p, u_list in collected_data.items() if user_data in u_list)
+                username = user_data.get('username_key', 'unknown')
                 progress.update(task, description=f"[cyan]Analyzing image from {platform}/{username}...")
+                
                 try:
-                    analysis = self.llm.analyze_image(Path(media_item['local_path']), source_url=media_item['url'], context=f"{platform} user {username}")
-                    media_item['analysis'] = analysis
-                    # Also populate the top-level list for the LLM
-                    if analysis and 'media_analysis' in collected_data[platform][0]['data']:
-                        collected_data[platform][0]['data']['media_analysis'].append(analysis)
+                    analysis = self.llm.analyze_image(
+                        Path(media_item['local_path']),
+                        source_url=media_item['url'],
+                        context=f"{platform} user {username}"
+                    )
+                    
+                    # We append the analysis directly to the correct user_data object.
+                    if analysis:
+                        # Ensure the 'media_analysis' list exists before appending.
+                        if 'media_analysis' not in user_data['data']:
+                            user_data['data']['media_analysis'] = []
+                        
+                        user_data['data']['media_analysis'].append(analysis)
+                        media_item['analysis'] = analysis # Also update the specific media item dict
+
                 except RateLimitExceededError:
                     console.print("[bold red]Vision model rate limit hit. Aborting further image analysis.[/bold red]")
-                    break
+                    break # Exit the loop if rate limited
                 except Exception as e:
                     logger.error(f"Image analysis failed for {media_item.get('local_path')}: {e}")
                 finally:

@@ -19,15 +19,7 @@ def mock_dependencies(mocker):
     return mock_cache, mock_llm, mock_client_manager
 
 @pytest.fixture
-def agent(mock_dependencies):
-    """Provides a SocialOSINTAgent instance with mocked dependencies for testing."""
-    args = argparse.Namespace(offline=False, no_auto_save=True, format="markdown")
-    mock_cache, mock_llm, mock_client_manager = mock_dependencies
-    agent_instance = SocialOSINTAgent(args, mock_cache, mock_llm, mock_client_manager)
-    return agent_instance
-
-@pytest.fixture
-def agent(mock_dependencies, monkeypatch): # Add monkeypatch here
+def agent(mock_dependencies, monkeypatch):
     """Provides a SocialOSINTAgent instance with mocked dependencies for testing."""
     # Use monkeypatch to set fake environment variables for the test
     monkeypatch.setenv("LLM_API_KEY", "test_key")
@@ -83,10 +75,10 @@ def test_analyze_method_orchestration(agent, mocker):
     result = agent.analyze(platforms_to_query, query, force_refresh=False)
 
     # Assert
-    # 1. Client manager was called
+    # Client manager was called
     agent.client_manager.get_platform_client.assert_called_once_with("twitter")
 
-    # 2. Fetcher was called correctly (without LLM object)
+    # Fetcher was called correctly (without LLM object)
     mock_fetcher.assert_called_once_with(
         username='testuser', 
         cache=agent.cache, 
@@ -95,13 +87,13 @@ def test_analyze_method_orchestration(agent, mocker):
         client=mock_twitter_client
     )
 
-    # 3. Vision analysis was called in the second phase
+    # Vision analysis was called in the second phase
     agent.llm.analyze_image.assert_called_once()
 
-    # 4. Final text analysis was called with the now-populated data
+    # Final text analysis was called with the now-populated data
     agent.llm.run_analysis.assert_called_once()
     
-    # 5. The final return value is a structured dictionary
+    # The final return value is a structured dictionary
     assert isinstance(result, dict)
     assert "metadata" in result
     assert "report" in result
