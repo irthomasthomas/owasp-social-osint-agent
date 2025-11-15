@@ -15,7 +15,7 @@ from .exceptions import (AccessForbiddenError, RateLimitExceededError,
                          UserNotFoundError)
 from .llm import LLMAnalyzer
 from .platforms import FETCHERS
-from .utils import SUPPORTED_IMAGE_EXTENSIONS, handle_rate_limit, sanitize_username
+from .utils import (SUPPORTED_IMAGE_EXTENSIONS, UserData, handle_rate_limit, sanitize_username)
 
 if not os.path.exists('/.dockerenv'):
     print(">>> Running in local mode: Loading .env file...")
@@ -50,33 +50,21 @@ class SocialOSINTAgent:
         self.base_dir.mkdir(parents=True, exist_ok=True)
         for dir_name in ["cache", "media", "outputs"]:
             (self.base_dir / dir_name).mkdir(parents=True, exist_ok=True)
-        
-        prompts_dir = self.base_dir.parent / "prompts"
-        if not prompts_dir.exists():
-            logger.warning(f"Prompts directory not found at: {prompts_dir}")
 
     def analyze(self, platforms: Dict[str, List[str]], query: str, force_refresh: bool = False, fetch_options: Optional[Dict[str, Any]] = None, console: Optional[Console] = None) -> Dict[str, Any]:
-        """
-        Orchestrates the two-phase analysis: data fetching and then LLM analysis.
-        Returns a structured dictionary with metadata and the report.
-        """
         progress_console = console or Console(stderr=True)
         collected_data: Dict[str, List[Dict]] = {p: [] for p in platforms}
         
-        # PHASE 1: DATA AND MEDIA FETCHING
         self._fetch_all_platform_data(platforms, force_refresh, fetch_options, collected_data, progress_console)
 
-        if not any(collected_data.values()):
+        if not any(data_list for data_list in collected_data.values()):
             return {"metadata": {}, "report": "[red]Data collection failed for all targets.[/red]", "error": True}
 
-        # PHASE 2: VISION ANALYSIS (IF NOT OFFLINE)
         if not self.args.offline:
             self._perform_vision_analysis(collected_data, progress_console)
 
-        # PHASE 3: TEXTUAL ANALYSIS & REPORTING
         with progress_console.status("[magenta]Synthesizing report with LLM..."):
-            try:
-                report = self.llm.run_analysis(collected_data, query)
+            try: report = self.llm.run_analysis(collected_data, query)
             except RateLimitExceededError as e:
                 handle_rate_limit(progress_console, "LLM Analysis", e)
                 return {"metadata": {}, "report": "[red]Analysis aborted due to LLM rate limit.[/red]", "error": True}
@@ -86,23 +74,8 @@ class SocialOSINTAgent:
 
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         text_model, img_model = os.getenv("ANALYSIS_MODEL"), os.getenv("IMAGE_ANALYSIS_MODEL")
-        
-        metadata = {
-            "query": query,
-            "targets": {p: u for p, u in platforms.items()},
-            "generated_utc": ts,
-            "mode": 'Offline' if self.args.offline else 'Online',
-            "models": {"text": text_model, "image": img_model}
-        }
-        
-        header = (
-            f"# OSINT Analysis Report\n\n"
-            f"**Query:** `{query}`\n"
-            f"**Generated:** `{ts}`\n"
-            f"**Mode:** `{metadata['mode']}`\n"
-            f"**Models Used:**\n- Text: `{text_model}`\n- Image: `{img_model}`\n\n---\n\n"
-        )
-        
+        metadata = {"query": query, "targets": platforms, "generated_utc": ts, "mode": 'Offline' if self.args.offline else 'Online', "models": {"text": text_model, "image": img_model}}
+        header = f"# OSINT Analysis Report\n\n**Query:** `{query}`\n**Generated:** `{ts}`\n**Mode:** `{metadata['mode']}`\n**Models Used:**\n- Text: `{text_model}`\n- Image: `{img_model}`\n\n---\n\n"
         return {"metadata": metadata, "report": header + report, "error": False}
 
     def _fetch_all_platform_data(self, platforms, force_refresh, fetch_options, collected_data, console):
@@ -115,114 +88,74 @@ class SocialOSINTAgent:
             default_count = fetch_options.get("default_count", 50)
 
             for platform, usernames in platforms.items():
-                fetcher = FETCHERS.get(platform)
-                if not fetcher:
-                    failed_fetches.append((platform, "all", "Fetcher not implemented"))
-                    progress.advance(task, len(usernames))
-                    continue
+                if not (fetcher := FETCHERS.get(platform)):
+                    failed_fetches.append((platform, "all", "Fetcher not implemented")); progress.advance(task, len(usernames)); continue
                 
                 for username in usernames:
                     progress.update(task, description=f"[cyan]Fetching {platform}/{username}...")
                     try:
                         client = self.client_manager.get_platform_client(platform)
-                        target_key = f"{platform}:{username}"
-                        target_opts = fetch_options.get("targets", {}).get(target_key, {})
-                        limit = target_opts.get("count", default_count)
-
-                        kwargs = {'username': username, 'cache': self.cache, 'force_refresh': force_refresh, 'fetch_limit': limit}
-                        if platform == "mastodon": kwargs['clients'], kwargs['default_client'] = client
-                        elif platform != "hackernews": kwargs['client'] = client
+                        limit = fetch_options.get("targets", {}).get(f"{platform}:{username}", {}).get("count", default_count)
                         
-                        data = fetcher(**kwargs)
-                        if data: collected_data[platform].append({"username_key": username, "data": data})
+                        kwargs = {'username': username, 'cache': self.cache, 'force_refresh': force_refresh, 'fetch_limit': limit}
+                        platforms_requiring_client = ["twitter", "reddit", "bluesky"]
+                        if platform == "mastodon": kwargs['clients'], kwargs['default_client'] = client
+                        elif platform in platforms_requiring_client: kwargs['client'] = client
+                        
+                        if data := fetcher(**kwargs):
+                            collected_data[platform].append({"username_key": username, "data": data})
                         else: failed_fetches.append((platform, username, "No data returned"))
                     
                     except RateLimitExceededError as e:
-                        handle_rate_limit(console, f"{platform.capitalize()} Fetch", e)
+                        handle_rate_limit(console, f"{platform.capitalize()} Fetch", e, should_raise=False)
                         failed_fetches.append((platform, username, "Rate Limited"))
-                    except (UserNotFoundError, AccessForbiddenError) as e:
-                        failed_fetches.append((platform, username, str(e)))
+                    except (UserNotFoundError, AccessForbiddenError) as e: failed_fetches.append((platform, username, str(e)))
                     except Exception as e:
                         logger.error(f"Fetch failed for {platform}/{username}: {e}", exc_info=True)
                         failed_fetches.append((platform, username, "Unexpected Error"))
-                    finally:
-                        progress.advance(task)
+                    finally: progress.advance(task)
         
         if failed_fetches:
             console.print("[yellow]Data collection issues:[/yellow]")
-            for p, u, r in failed_fetches:
-                console.print(f"- {p}/{u}: {r}")
+            for p, u, r in failed_fetches: console.print(f"- {p}/{u}: {r}")
 
-    def _perform_vision_analysis(self, collected_data, console):
-        
-        # Phase 1: Count all images that need analysis to set up the progress bar accurately.
-        total_media_to_analyze = 0
-        all_media_items = []
-
-        for platform, users_data in collected_data.items():
-            for user_data in users_data:
-                data_items = (
-                    user_data.get('data', {}).get('tweets') or
-                    user_data.get('data', {}).get('posts') or
-                    user_data.get('data', {}).get('submissions') or
-                    user_data.get('data', {}).get('items', [])
-                )
-                
-                for item in data_items:
-                    if not item or 'media' not in item:
-                        continue
-                    for media_item in item['media']:
-                        if not media_item:
-                            continue
-                        path_str = media_item.get('local_path')
-                        # Only count images that exist and have not already been analyzed.
-                        if path_str and not media_item.get('analysis'):
+    def _perform_vision_analysis(self, collected_data: Dict[str, List[Dict[str, UserData]]], console):
+        media_to_analyze = []
+        for user_data_list in collected_data.values():
+            for user_data_dict in user_data_list:
+                user_data = user_data_dict["data"]
+                for post in user_data.get("posts", []):
+                    for media_item in post.get("media", []):
+                        if (path_str := media_item.get("local_path")) and not media_item.get("analysis"):
                             path = Path(path_str)
                             if path.exists() and path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS:
-                                total_media_to_analyze += 1
-                                # Store a reference to the media item and its parent user_data
-                                all_media_items.append((media_item, user_data))
+                                media_to_analyze.append((media_item, user_data["profile"]))
+        if not media_to_analyze: return
 
-        if not all_media_items:
-            return
+        modified_users = set()
 
-        # Phase 2: Perform the analysis with a correct progress bar.
         with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), transient=True, console=console) as progress:
-            task = progress.add_task("[cyan]Analyzing images...", total=total_media_to_analyze)
-            
-            for media_item, user_data in all_media_items:
-                platform = next(p for p, u_list in collected_data.items() if user_data in u_list)
-                username = user_data.get('username_key', 'unknown')
-                progress.update(task, description=f"[cyan]Analyzing image from {platform}/{username}...")
-                
+            task = progress.add_task("[cyan]Analyzing images...", total=len(media_to_analyze))
+            for media_item, profile in media_to_analyze:
+                progress.update(task, description=f"[cyan]Analyzing image from {profile['platform']}/{profile['username']}...")
                 try:
                     analysis = self.llm.analyze_image(
-                        Path(media_item['local_path']),
-                        source_url=media_item['url'],
-                        context=f"{platform} user {username}"
+                        Path(media_item['local_path']), source_url=media_item['url'],
+                        context=f"{profile['platform']} user {profile['username']}"
                     )
-                    
-                    # We append the analysis directly to the correct user_data object.
-                    if analysis:
-                        # Ensure the 'media_analysis' list exists before appending.
-                        if 'media_analysis' not in user_data['data']:
-                            user_data['data']['media_analysis'] = []
-                        
-                        user_data['data']['media_analysis'].append(analysis)
-                        media_item['analysis'] = analysis # Also update the specific media item dict
-
+                    if analysis: 
+                        media_item['analysis'] = analysis
+                        modified_users.add((profile['platform'], profile['username']))
                 except RateLimitExceededError:
-                    console.print("[bold red]Vision model rate limit hit. Aborting further image analysis.[/bold red]")
-                    break # Exit the loop if rate limited
-                except Exception as e:
-                    logger.error(f"Image analysis failed for {media_item.get('local_path')}: {e}")
-                finally:
-                    progress.advance(task)
+                    console.print("[bold red]Vision model rate limit hit. Aborting further image analysis.[/bold red]"); break
+                except Exception as e: logger.error(f"Image analysis failed for {media_item.get('local_path')}: {e}")
+                finally: progress.advance(task)
         
-        # After analysis, re-save the data to cache the new vision results
-        for platform, users_data in collected_data.items():
-            for user_data in users_data:
-                self.cache.save(platform, user_data['username_key'], user_data['data'])
+        for platform, user_data_list in collected_data.items():
+            for user_data_dict in user_data_list:
+                username = user_data_dict['username_key']
+                if (platform, username) in modified_users:
+                    self.cache.save(platform, username, user_data_dict['data'])
 
     def process_stdin(self):
         stderr_console = Console(stderr=True)

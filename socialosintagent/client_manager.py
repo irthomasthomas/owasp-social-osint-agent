@@ -99,6 +99,8 @@ class ClientManager:
             if platform == "reddit": return self.reddit_client
             if platform == "bluesky": return self.bluesky_client
             if platform == "mastodon": return self.get_mastodon_clients()
+            # GitHub client is handled within the fetcher, so we return None
+            if platform == "github": return None 
         except (RuntimeError, tweepy.errors.TweepyException, praw.exceptions.PRAWException, atproto_exceptions.AtProtocolError) as e:
             raise RuntimeError(f"Failed to initialize client for {platform}: {e}")
         return None
@@ -109,5 +111,6 @@ class ClientManager:
         if not check_creds or all(os.getenv(k) for k in ["REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET", "REDDIT_USER_AGENT"]): available.append("reddit")
         if not check_creds or all(os.getenv(k) for k in ["BLUESKY_IDENTIFIER", "BLUESKY_APP_SECRET"]): available.append("bluesky")
         if not check_creds or os.getenv("MASTODON_INSTANCE_1_URL"): available.append("mastodon")
+        if not check_creds or os.getenv("GITHUB_TOKEN"): available.append("github") # Add this line
         available.append("hackernews")
         return sorted(list(set(available)))

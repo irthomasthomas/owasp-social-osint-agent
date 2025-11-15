@@ -7,6 +7,7 @@ from socialosintagent.analyzer import SocialOSINTAgent
 from socialosintagent.cache import CacheManager
 from socialosintagent.client_manager import ClientManager
 from socialosintagent.llm import LLMAnalyzer
+from socialosintagent.utils import UserData
 
 @pytest.fixture
 def mock_dependencies(mocker):
@@ -30,41 +31,37 @@ def agent(mock_dependencies, monkeypatch):
     args = argparse.Namespace(offline=False, no_auto_save=True, format="markdown")
     mock_cache, mock_llm, mock_client_manager = mock_dependencies
     
-    # This call will now succeed because the environment variables are set
     agent_instance = SocialOSINTAgent(args, mock_cache, mock_llm, mock_client_manager)
     return agent_instance
 
 def test_analyze_method_orchestration(agent, mocker):
     """
-    Tests the main analyze() method's two-phase process: fetch then vision analysis.
+    Tests the main analyze() method's orchestration with the new UserData model.
     """
     # Arrange
-    # The fetcher now returns data with a media path but no analysis yet.
-    mock_platform_data = {
-        "user_info": {"id": "123"},
-        "tweets": [{
+    # It has 'profile' and 'posts' keys.
+    mock_user_data: UserData = {
+        "profile": {"platform": "twitter", "username": "testuser", "id": "123"},
+        "posts": [{
+            "id": "t1",
             "media": [{
                 "local_path": "/fake/path/image.jpg",
                 "url": "http://example.com/image.jpg",
-                "analysis": None
+                "analysis": None # Starts with no analysis
             }]
-        }],
-        "media_analysis": [], # Starts empty
-        "media_paths": ["/fake/path/image.jpg"]
+        }]
     }
-    mock_fetcher = mocker.MagicMock(return_value=mock_platform_data)
+    
+    # The fetcher now returns this canonical data structure
+    mock_fetcher = mocker.MagicMock(return_value=mock_user_data)
     
     mock_twitter_client = MagicMock()
     agent.client_manager.get_platform_client.return_value = mock_twitter_client
 
-    # Mock the Path object to simulate the image file existing
     mocker.patch('pathlib.Path.exists', return_value=True)
     mocker.patch('pathlib.Path.suffix', '.jpg')
-
-    # Patch the global FETCHERS dictionary
     mocker.patch('socialosintagent.analyzer.FETCHERS', {"twitter": mock_fetcher})
     
-    # Mock the two distinct LLM calls
     agent.llm.analyze_image.return_value = "This is an image analysis."
     agent.llm.run_analysis.return_value = "This is the final report."
 
@@ -75,10 +72,7 @@ def test_analyze_method_orchestration(agent, mocker):
     result = agent.analyze(platforms_to_query, query, force_refresh=False)
 
     # Assert
-    # Client manager was called
     agent.client_manager.get_platform_client.assert_called_once_with("twitter")
-
-    # Fetcher was called correctly (without LLM object)
     mock_fetcher.assert_called_once_with(
         username='testuser', 
         cache=agent.cache, 
@@ -87,15 +81,11 @@ def test_analyze_method_orchestration(agent, mocker):
         client=mock_twitter_client
     )
 
-    # Vision analysis was called in the second phase
+    # Vision analysis was called.
     agent.llm.analyze_image.assert_called_once()
-
-    # Final text analysis was called with the now-populated data
+    # Final text analysis was called.
     agent.llm.run_analysis.assert_called_once()
     
-    # The final return value is a structured dictionary
     assert isinstance(result, dict)
-    assert "metadata" in result
-    assert "report" in result
     assert result["report"].endswith("This is the final report.")
     assert result["error"] is False

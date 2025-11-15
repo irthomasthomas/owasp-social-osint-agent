@@ -1,11 +1,11 @@
-import tweepy
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
+import tweepy
 
-from socialosintagent.platforms import twitter as twitter_fetcher
 from socialosintagent.exceptions import UserNotFoundError
+from socialosintagent.platforms import twitter as twitter_fetcher
 
 
 @pytest.fixture
@@ -14,7 +14,7 @@ def mock_tweepy_client(mocker):
     mock_user = MagicMock(
         id=12345, name="Test User", username="testuser",
         created_at=datetime(2022, 1, 1, tzinfo=timezone.utc),
-        public_metrics={"followers": 100}
+        public_metrics={"followers_count": 100} 
     )
     mock_tweet = MagicMock(spec=tweepy.Tweet)
     mock_tweet.id = 54321

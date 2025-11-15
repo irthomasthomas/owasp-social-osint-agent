@@ -4,7 +4,8 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-
+from .cache import CACHE_EXPIRY_HOURS 
+from .utils import get_sort_key
 import humanize
 from rich.console import Console
 from rich.markdown import Markdown
@@ -70,9 +71,17 @@ class CliHandler:
                         query_platforms[p] = users
                 if not query_platforms: self.console.print("[yellow]No users entered.[/yellow]"); continue
                 
-                default_count_str = Prompt.ask("Enter default number of items to fetch per target", default="50")
-                try: default_count = int(default_count_str)
-                except ValueError: default_count = 50; self.console.print("[yellow]Invalid number, using 50.[/yellow]")
+                MIN_FETCH_ALLOWED = 5
+
+                default_count_str = Prompt.ask(f"Enter default number of items to fetch per target (min {MIN_FETCH_ALLOWED})", default="50")
+                try:
+                    default_count = int(default_count_str)
+                    if default_count < MIN_FETCH_ALLOWED:
+                        self.console.print(f"[yellow]The minimum fetch count is {MIN_FETCH_ALLOWED}. Adjusting your input to {MIN_FETCH_ALLOWED}.[/yellow]")
+                        default_count = MIN_FETCH_ALLOWED
+                except ValueError:
+                    default_count = 50
+                    self.console.print("[yellow]Invalid number, using 50.[/yellow]")
                 
                 fetch_options = {"default_count": default_count, "targets": {}}
                 self._run_analysis_loop(query_platforms, fetch_options)
@@ -164,19 +173,37 @@ class CliHandler:
             try:
                 platform, username = file.stem.split("_", 1)
                 data = self.agent.cache.load(platform, username)
-                if not data: continue
-                ts_str, age = data.get("timestamp", "N/A"), "N/A"
-                if ts_str != "N/A": age = self._format_cache_age(ts_str)
-                counts_parts = []
-                if 'tweets' in data: counts_parts.append(f"{len(data['tweets'])}t")
-                if 'submissions' in data: counts_parts.append(f"{len(data['submissions'])}s")
-                if 'comments' in data: counts_parts.append(f"{len(data['comments'])}c")
-                if 'posts' in data: counts_parts.append(f"{len(data['posts'])}p")
-                if 'items' in data: counts_parts.append(f"{len(data['items'])}i")
-                counts_str = ", ".join(counts_parts) or "N/A"
-                media_analyzed = len([m for m in data.get('media_analysis', []) if m and m.strip()]); media_found = len(data.get('media_paths', [])); media_str = f"{media_analyzed}/{media_found}"
-                table.add_row(platform.capitalize(), username, ts_str[:19], age, counts_str, media_str)
-            except Exception as e: logger.error(f"Error processing {file.name} for status: {e}")
+                if not data:
+                    continue
+                    
+                profile = data.get("profile", {})
+                ts_str = data.get("timestamp", "N/A")
+                age = "N/A"
+                if isinstance(ts_str, str):
+                    age = self._format_cache_age(ts_str)
+
+                item_count = len(data.get("posts", []))
+                
+                media_found = 0
+                media_analyzed = 0
+                for post in data.get("posts", []):
+                    for media_item in post.get("media", []):
+                        media_found += 1
+                        if media_item.get("analysis"):
+                            media_analyzed += 1
+                
+                media_str = f"{media_analyzed}/{media_found}"
+
+                table.add_row(
+                    platform.capitalize(), 
+                    profile.get("username", username),
+                    str(ts_str)[:19], 
+                    age, 
+                    str(item_count), 
+                    media_str
+                )
+            except Exception as e:
+                logger.error(f"Error processing {file.name} for status: {e}")
         if table.row_count > 0: self.console.print(table)
         else: self.console.print("[yellow]No valid cache files found.[/yellow]\n")
         Prompt.ask("\n[dim]Press Enter to return[/dim]", default="")
@@ -243,10 +270,14 @@ class CliHandler:
     def _get_cache_info_string(self, platform: str, username: str) -> str:
         data = self.agent.cache.load(platform, username)
         if not data: return "[dim](no cache)[/dim]"
+        
         ts = data.get("timestamp")
-        fresh = "[red]date err[/red]"
+        age_str = "date err"
         if ts:
-            age = datetime.now(timezone.utc) - datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
-            fresh = "[green]fresh[/green]" if age.total_seconds() < 24*3600 else f"[yellow]stale ({self._format_cache_age(ts)})[/yellow]"
-        counts = {"twitter": len(data.get('tweets',[])), "reddit": len(data.get('submissions',[]))+len(data.get('comments',[])), "bluesky": len(data.get('posts',[])), "mastodon": len(data.get('posts',[])), "hackernews": len(data.get('items',[]))}
-        return f"(cached: {counts.get(platform, 0)} items, {fresh})"
+            age = datetime.now(timezone.utc) - get_sort_key(data, "timestamp")
+            is_fresh = age.total_seconds() < CACHE_EXPIRY_HOURS * 3600
+            age_str = "[green]fresh[/green]" if is_fresh else f"[yellow]stale ({self._format_cache_age(ts)})[/yellow]"
+        
+        # Universal item count
+        item_count = len(data.get("posts", []))
+        return f"(cached: {item_count} items, {age_str})"

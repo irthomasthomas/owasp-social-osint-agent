@@ -1,6 +1,8 @@
 class RateLimitExceededError(Exception):
     """Custom exception for API rate limits."""
-    pass
+    def __init__(self, message, original_exception=None):
+        super().__init__(message)
+        self.original_exception = original_exception
 
 
 class UserNotFoundError(Exception):
