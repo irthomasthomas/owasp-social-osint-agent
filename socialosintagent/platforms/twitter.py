@@ -32,9 +32,7 @@ def fetch_data(
     logger.info(f"Fetching Twitter data for @{username} (Limit: {fetch_limit})")
     
     try:
-        profile_obj: Optional[NormalizedProfile] = None
-        if not force_refresh and cached_data and "profile" in cached_data:
-            profile_obj = cached_data["profile"]
+        profile_obj = cached_data.get("profile") if not force_refresh and cached_data else None
         
         if not profile_obj:
             user_response = client.get_user(
@@ -56,40 +54,42 @@ def fetch_data(
             )
         
         user_id = profile_obj["id"]
-        existing_posts = cached_data.get("posts", []) if not force_refresh and cached_data else []
-        processed_post_ids = {p['id'] for p in existing_posts}
-        all_posts: List[NormalizedPost] = list(existing_posts)
+        all_posts = cached_data.get("posts", []) if not force_refresh and cached_data else []
+        processed_post_ids = {p['id'] for p in all_posts}
         
         needed_count = fetch_limit - len(all_posts)
-        is_incremental_update = not force_refresh and cached_data and needed_count <= 0
-
-        pagination_token = None
-        while needed_count > 0 or is_incremental_update:
-            page_limit = max(min(needed_count, 100) if not is_incremental_update else 100, MIN_API_FETCH_LIMIT)
-            since_id = all_posts[0]['id'] if is_incremental_update and all_posts else None
-            
-            tweets_response = client.get_users_tweets(
-                id=user_id, max_results=page_limit, since_id=since_id, pagination_token=pagination_token,
-                tweet_fields=["created_at", "public_metrics", "attachments", "entities", "in_reply_to_user_id", "referenced_tweets"],
-                expansions=["attachments.media_keys", "in_reply_to_user_id"],
-                media_fields=["url", "preview_image_url", "type", "media_key"],
-            )
-            
-            if not tweets_response.data: break
-
-            media_dict = {m.media_key: m for m in tweets_response.includes.get("media", [])} if tweets_response.includes else {}
-            auth_details = {"bearer_token": client.bearer_token}
-
-            for tweet in tweets_response.data:
-                if str(tweet.id) not in processed_post_ids:
-                    all_posts.append(_to_normalized_post(tweet, media_dict, cache, auth_details))
-                    processed_post_ids.add(str(tweet.id))
-
-            needed_count -= len(tweets_response.data)
-            pagination_token = tweets_response.meta.get("next_token")
-            if not pagination_token or is_incremental_update: break
         
-        final_posts = sorted(all_posts, key=lambda x: x['created_at'], reverse=True)[:max(fetch_limit, MAX_CACHE_ITEMS)]
+        if force_refresh or needed_count > 0:
+            pagination_token = None
+            while needed_count > 0:
+                page_limit = max(min(needed_count, 100), MIN_API_FETCH_LIMIT)
+                
+                tweets_response = client.get_users_tweets(
+                    id=user_id, max_results=page_limit, pagination_token=pagination_token,
+                    tweet_fields=["created_at", "public_metrics", "attachments", "entities", "in_reply_to_user_id", "referenced_tweets"],
+                    expansions=["attachments.media_keys"],
+                    media_fields=["url", "preview_image_url", "type", "media_key"],
+                )
+                
+                if not tweets_response.data: break
+
+                media_dict = {m.media_key: m for m in tweets_response.includes.get("media", [])} if tweets_response.includes else {}
+                auth_details = {"bearer_token": client.bearer_token}
+
+                new_tweets_found = 0
+                for tweet in tweets_response.data:
+                    if str(tweet.id) not in processed_post_ids:
+                        all_posts.append(_to_normalized_post(tweet, media_dict, cache, auth_details))
+                        processed_post_ids.add(str(tweet.id))
+                        new_tweets_found += 1
+
+                if new_tweets_found == 0: # Stop if a page returns no new tweets
+                    break
+                needed_count -= new_tweets_found
+                pagination_token = tweets_response.meta.get("next_token")
+                if not pagination_token: break
+        
+        final_posts = sorted(all_posts, key=lambda x: get_sort_key(x, "created_at"), reverse=True)[:max(fetch_limit, MAX_CACHE_ITEMS)]
         user_data = UserData(profile=profile_obj, posts=final_posts)
         cache.save("twitter", username, user_data)
         return user_data
@@ -101,6 +101,8 @@ def fetch_data(
     except tweepy.errors.Forbidden as e:
         raise AccessForbiddenError(f"Access forbidden to @{username}'s tweets. Reason: {e}")
     except Exception as e:
+        if isinstance(e, (UserNotFoundError, AccessForbiddenError, RateLimitExceededError)):
+            raise
         logger.error(f"Unexpected error fetching Twitter data for @{username}: {e}", exc_info=True)
         return None
 

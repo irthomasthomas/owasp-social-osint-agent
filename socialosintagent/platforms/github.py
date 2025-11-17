@@ -41,9 +41,7 @@ def fetch_data(
 
     try:
         with httpx.Client(headers=headers, timeout=20.0, follow_redirects=True) as client:
-            profile_obj: Optional[NormalizedProfile] = None
-            if not force_refresh and cached_data and "profile" in cached_data:
-                profile_obj = cached_data["profile"]
+            profile_obj = cached_data.get("profile") if not force_refresh and cached_data else None
             
             if not profile_obj:
                 profile_resp = client.get(f"{GITHUB_API_BASE_URL}/users/{username}")
@@ -59,25 +57,31 @@ def fetch_data(
                     }
                 )
             
-            existing_posts = cached_data.get("posts", []) if not force_refresh and cached_data else []
-            processed_post_ids = {p['id'] for p in existing_posts}
-            all_posts: List[NormalizedPost] = list(existing_posts)
+            all_posts: List[NormalizedPost] = cached_data.get("posts", []) if not force_refresh and cached_data else []
+            processed_post_ids = {p['id'] for p in all_posts}
             
-            page = 1
-            while len(all_posts) < fetch_limit:
-                events_resp = client.get(
-                    f"{GITHUB_API_BASE_URL}/users/{username}/events/public",
-                    params={"per_page": min(fetch_limit, 100), "page": page}
-                )
-                _check_response_for_errors(events_resp)
-                events_data = events_resp.json()
-                if not events_data: break
+            needed_count = fetch_limit - len(all_posts)
+            if force_refresh or needed_count > 0:
+                page = 1
+                while len(all_posts) < fetch_limit:
+                    events_resp = client.get(
+                        f"{GITHUB_API_BASE_URL}/users/{username}/events/public",
+                        params={"per_page": min(fetch_limit, 100), "page": page}
+                    )
+                    _check_response_for_errors(events_resp)
+                    events_data = events_resp.json()
+                    if not events_data: break
 
-                for event in events_data:
-                    if event["id"] not in processed_post_ids:
-                        all_posts.append(_to_normalized_post(event))
-                        processed_post_ids.add(event["id"])
-                page += 1
+                    new_posts_found = 0
+                    for event in events_data:
+                        if event["id"] not in processed_post_ids:
+                            all_posts.append(_to_normalized_post(event))
+                            processed_post_ids.add(event["id"])
+                            new_posts_found += 1
+                    
+                    if new_posts_found == 0:
+                        break
+                    page += 1
 
             final_posts = sorted(all_posts, key=lambda x: x['created_at'], reverse=True)[:max(fetch_limit, MAX_CACHE_ITEMS)]
             user_data = UserData(profile=profile_obj, posts=final_posts)

@@ -1,9 +1,11 @@
+"""Manages the file-based caching of API responses and media."""
+
 import json
 import logging
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from .utils import DateTimeEncoder, UserData, get_sort_key
 
@@ -13,50 +15,108 @@ MAX_CACHE_ITEMS = 200
 CACHE_EXPIRY_HOURS = 24
 
 class CacheManager:
+    """Handles saving and loading of normalized UserData to/from JSON files."""
     def __init__(self, base_dir: Path, is_offline: bool):
-        self.base_dir = base_dir; self.is_offline = is_offline
-        self.cache_dir = self.base_dir / "cache"; self.cache_dir.mkdir(parents=True, exist_ok=True)
+        """
+        Initializes the CacheManager.
+
+        Args:
+            base_dir: The root directory for all data (e.g., 'data/').
+            is_offline: If True, expired cache will still be returned.
+        """
+        self.base_dir = base_dir
+        self.is_offline = is_offline
+        self.cache_dir = self.base_dir / "cache"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     @lru_cache(maxsize=128)
     def get_cache_path(self, platform: str, username: str) -> Path:
+        """
+        Generates a standardized, safe file path for a given platform and username.
+        
+        Uses lru_cache for performance to avoid repeated path constructions.
+
+        Args:
+            platform: The name of the social media platform.
+            username: The username of the target.
+
+        Returns:
+            A Path object for the cache file.
+        """
+        # Sanitize username to create a safe filename
         safe_username = "".join(c for c in username if c.isalnum() or c in ["-", "_", ".", "@"])[:100]
         return self.cache_dir / f"{platform}_{safe_username}.json"
 
     def load(self, platform: str, username: str) -> Optional[UserData]:
+        """
+        Loads and validates a user's data from the cache.
+
+        - Checks for file existence.
+        - Validates that the file contains the required keys for the standard UserData model.
+        - Checks for cache expiry, returning None if expired (unless in offline mode).
+
+        Args:
+            platform: The name of the social media platform.
+            username: The username of the target.
+
+        Returns:
+            A UserData dictionary if a valid, non-expired cache file is found, otherwise None.
+        """
         cache_path = self.get_cache_path(platform, username)
-        if not cache_path.exists(): return None
+        if not cache_path.exists():
+            return None
+        
         try:
-            data = json.loads(cache_path.read_text(encoding="utf-8"))
+            data: UserData = json.loads(cache_path.read_text(encoding="utf-8"))
             
-            # Universal validation for the canonical model
+            # Universal validation: Ensure the cache file conforms to our standard data model.
+            # This prevents loading of old, incompatible cache formats.
             if not all(k in data for k in ["timestamp", "profile", "posts"]):
-                logger.warning(f"Cache file for {platform}/{username} is incomplete. Discarding.")
-                cache_path.unlink(missing_ok=True); return None
+                logger.warning(f"Cache file for {platform}/{username} is incomplete or in an old format. Discarding.")
+                cache_path.unlink(missing_ok=True)
+                return None
 
             timestamp = get_sort_key(data, "timestamp")
+            
             if self.is_offline:
-                logger.info(f"Offline mode: Using cache for {platform}/{username}.")
+                logger.info(f"Offline mode: Using potentially stale cache for {platform}/{username}.")
                 return data
 
+            # In online mode, check if the cache is expired.
             if (datetime.now(timezone.utc) - timestamp) < timedelta(hours=CACHE_EXPIRY_HOURS):
                 logger.info(f"Cache hit and valid for {platform}/{username}")
                 return data
             else:
-                logger.info(f"Cache expired for {platform}/{username}. Discarding."); return None
+                logger.info(f"Cache expired for {platform}/{username}. Discarding.")
+                # We don't delete the file here, as the fetcher will overwrite it.
+                return None
 
         except (json.JSONDecodeError, KeyError, FileNotFoundError) as e:
             logger.warning(f"Failed to load or parse cache for {platform}/{username}: {e}. Discarding.")
-            cache_path.unlink(missing_ok=True); return None
+            cache_path.unlink(missing_ok=True)
+            return None
 
     def save(self, platform: str, username: str, data: UserData):
+        """
+        Saves a UserData object to a JSON file in the cache.
+
+        Automatically adds a timestamp and sorts posts before saving.
+
+        Args:
+            platform: The name of the social media platform.
+            username: The username of the target.
+            data: The UserData dictionary to save.
+        """
         cache_path = self.get_cache_path(platform, username)
         try:
-            # Universal sorting
+            # Ensure posts are always sorted chronologically, newest first.
             if "posts" in data and isinstance(data["posts"], list):
                 data["posts"].sort(key=lambda x: get_sort_key(x, 'created_at'), reverse=True)
             
+            # Add metadata before saving
             data["timestamp"] = datetime.now(timezone.utc)
             data["stats"] = {"total_posts_cached": len(data.get("posts", []))}
+            
             cache_path.write_text(json.dumps(data, indent=2, cls=DateTimeEncoder), encoding="utf-8")
             logger.info(f"Saved cache for {platform}/{username} to {cache_path}")
         except Exception as e:

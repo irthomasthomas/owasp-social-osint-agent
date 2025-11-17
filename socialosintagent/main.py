@@ -16,8 +16,6 @@ from socialosintagent.llm import LLMAnalyzer
 def main():
     load_dotenv()
 
-    # Define the logs directory path and ensure it exists.
-    # This makes the application work correctly even when run locally without Docker.
     logs_dir = Path("logs")
     logs_dir.mkdir(exist_ok=True)
     log_file_path = logs_dir / "analyzer.log"

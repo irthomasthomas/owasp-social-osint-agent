@@ -32,9 +32,7 @@ def fetch_data(
     logger.info(f"Fetching Bluesky data for {username} (Limit: {fetch_limit})")
 
     try:
-        profile_obj: Optional[NormalizedProfile] = None
-        if not force_refresh and cached_data and "profile" in cached_data:
-            profile_obj = cached_data["profile"]
+        profile_obj = cached_data.get("profile") if not force_refresh and cached_data else None
 
         if not profile_obj:
             profile = client.get_profile(actor=username)
@@ -44,32 +42,38 @@ def fetch_data(
                 username=profile.handle,
                 display_name=profile.display_name,
                 bio=profile.description,
-                created_at=None,  # Bluesky profile API doesn't provide creation date
+                created_at=None,
                 profile_url=f"https://bsky.app/profile/{profile.handle}",
                 metrics={"followers": profile.followers_count, "following": profile.follows_count, "post_count": profile.posts_count}
             )
+        
+        all_posts: List[NormalizedPost] = cached_data.get("posts", []) if not force_refresh and cached_data else []
+        processed_post_ids = {p['id'] for p in all_posts}
+        
+        needed_count = fetch_limit - len(all_posts)
 
-        existing_posts = cached_data.get("posts", []) if not force_refresh and cached_data else []
-        processed_post_ids = {p['id'] for p in existing_posts}
-        all_posts: List[NormalizedPost] = list(existing_posts)
+        if force_refresh or needed_count > 0:
+            cursor = None
+            while len(all_posts) < fetch_limit:
+                response = client.get_author_feed(actor=username, cursor=cursor, limit=min(fetch_limit, 100))
+                if not response or not response.feed:
+                    break
 
-        cursor = None
-        while len(all_posts) < fetch_limit:
-            response = client.get_author_feed(actor=username, cursor=cursor, limit=min(fetch_limit, 100))
-            if not response or not response.feed:
-                break
+                new_posts_found = 0
+                for feed_item in response.feed:
+                    post = feed_item.post
+                    if post.uri not in processed_post_ids:
+                        all_posts.append(_to_normalized_post(post, cache, client))
+                        processed_post_ids.add(post.uri)
+                        new_posts_found += 1
 
-            for feed_item in response.feed:
-                post = feed_item.post
-                if post.uri not in processed_post_ids:
-                    all_posts.append(_to_normalized_post(post, cache, client))
-                    processed_post_ids.add(post.uri)
+                if new_posts_found == 0:
+                    break
+                cursor = response.cursor
+                if not cursor:
+                    break
 
-            cursor = response.cursor
-            if not cursor:
-                break
-
-        final_posts = sorted(all_posts, key=lambda x: x['created_at'], reverse=True)[:max(fetch_limit, MAX_CACHE_ITEMS)]
+        final_posts = sorted(all_posts, key=lambda x: get_sort_key(x, "created_at"), reverse=True)[:max(fetch_limit, MAX_CACHE_ITEMS)]
         user_data = UserData(profile=profile_obj, posts=final_posts)
         cache.save("bluesky", username, user_data)
         return user_data

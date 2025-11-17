@@ -1,3 +1,4 @@
+
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/bm-github/owasp-social-osint-agent)](https://github.com/bm-github/owasp-social-osint-agent/releases/latest)
 # 🕵️ owasp-social-osint-agent
 
@@ -5,35 +6,35 @@
 
 ## 🌟 Key Features
 
-✅ **Multi-Platform Data Collection:** Aggregates data from Twitter/X, Reddit, Bluesky, Hacker News (via Algolia API), and Mastodon (multi-instance support).
+✅ **Multi-Platform Data Collection:** Aggregates data from Twitter/X, Reddit, Bluesky, GitHub, Hacker News, and Mastodon.
 
 ✅ **AI-Powered Analysis:** Utilises configurable models via OpenAI-compatible APIs for sophisticated text and image analysis. Employs externalized, easily editable prompt files.
 
-✅ **Efficient Two-Phase Analysis:** The agent first fetches all textual data and downloads all media across all targets. Only after all data collection is complete does it begin the (slower) vision analysis phase, ensuring maximum efficiency and preventing data fetching from being blocked.
+✅ **Efficient Two-Phase Analysis:** The agent first fetches all textual data and downloads all media across all targets. Only after all data collection is complete does it begin the (slower) vision analysis phase, ensuring maximum efficiency.
 
 ✅ **Cross-Account Comparison:** Analyze profiles across multiple selected platforms simultaneously.
 
-✅ **Accurate Temporal Analysis:** Injects the current, real-world UTC timestamp into every analysis prompt. This forces the LLM to understand the timeline of events correctly and prevents it from making errors based on its fixed knowledge cutoff date.
+✅ **Accurate Temporal Analysis:** Injects the current, real-world UTC timestamp into every analysis prompt, forcing the LLM to understand the timeline of events correctly.
 
 ✅ **Structured AI Prompts:** Employs detailed system prompts for objective, evidence-based analysis focusing on behavior, semantics, interests, and communication style.
 
-✅ **Vision-Capable Image Analysis:** Analyzes downloaded images (`JPEG, PNG, GIF, WEBP`) for OSINT insights using a vision-enabled LLM, focusing on objective details.
+✅ **Vision-Capable Image Analysis:** Analyzes downloaded images (`JPEG, PNG, GIF, WEBP`) for OSINT insights using a vision-enabled LLM.
 
-✅ **Flexible Fetch Control:** Interactively set a default fetch count for all targets. Use the `loadmore` command to incrementally fetch more data for specific users, or define a detailed "Fetch Plan" in programmatic mode.
+✅ **Flexible Fetch Control:** Interactively set a default fetch count for all targets and use the `loadmore` command to incrementally fetch more data for specific users.
 
 ✅ **Linked Image Analysis:** Each AI-generated image analysis in the final report includes a direct, clickable link to the source image, making it easy to cross-reference and verify findings.
 
 ✅ **Shared Domain Analysis:** Automatically extracts all external links shared by a user, counts the frequency of each domain, and includes a "Top Shared Domains" summary in the final report.
 
-✅ **Offline Mode (`--offline`):** Run analysis using only locally cached data. Skips all external network requests (social platforms, media downloads, and *new* vision analysis).
+✅ **Offline Mode (`--offline`):** Run analysis using only locally cached data. Skips all external network requests.
 
 ✅ **Intelligent Rate Limit Handling:** Detects API rate limits from social platforms and LLM providers, provides informative feedback, and prevents excessive requests.
 
 ✅ **Robust Caching System:** Caches fetched text data for 24 hours (`data/cache/`) and media files (`data/media/`) to reduce API calls and speed up subsequent analyses. Vision analysis results are also cached.
 
-✅ **Cache Management:** Interactive commands (`cache status`, `purge data`) to display a summary of all cached data or to purge specific types of data (cache, media, or reports).
+✅ **Cache Management:** Interactive commands (`cache status`, `purge data`) to display a summary of all cached data or to purge specific types of data.
 
-✅ **Interactive CLI & Docker Support:** User-friendly command-line interface with rich formatting (`rich`) that runs both locally and within a fully containerized Docker environment.
+✅ **Interactive CLI & Docker Support:** User-friendly command-line interface with rich formatting that runs both locally and within a fully containerized Docker environment.
 
 ✅ **Programmatic/Batch Mode:** Supports input via JSON from stdin for automated workflows (`--stdin`).
 
@@ -55,8 +56,7 @@ flowchart TD
     AA --> B{Interactive or<br/>Stdin Mode?}
     
     %% Interactive Mode Path
-    B -->|Interactive| B1([Prompt Auto-Save Setting])
-    B1 --> C[/Display Platform Menu/]
+    B -->|Interactive| C[/Display Platform Menu/]
     C --> D{Platform<br/>Selection}
     
     %% Platform-Specific Branches
@@ -65,6 +65,7 @@ flowchart TD
     D -->|HackerNews| E3([HackerNews])
     D -->|Bluesky| E4([Bluesky])
     D -->|Mastodon| E5([Mastodon])
+    D -->|GitHub| E7([GitHub])
     D -->|Cross-Platform| E6([Multiple Platforms])
     D -->|Purge Data| PD([Purge Data])
     PD --> C
@@ -73,8 +74,7 @@ flowchart TD
     
     %% Stdin Mode Path
     B -->|Stdin| F([Parse JSON Input])
-    F --> GA([Get Auto-Save Setting])
-    GA --> G([Extract Platforms & Query])
+    F --> G([Extract Platforms & Query])
     
     %% Analysis Loop Entry Points
     E1 --> H([Enter Analysis Loop])
@@ -82,6 +82,7 @@ flowchart TD
     E3 --> H
     E4 --> H
     E5 --> H
+    E7 --> H
     E6 --> H
     G --> J([Run Analysis])
     
@@ -130,7 +131,6 @@ flowchart TD
     WC --> H
     WB -->|No| H
     
-    %% Class Definitions for styling (no change)
     classDef startClass fill:#E8F5E8,stroke:#4CAF50,stroke-width:3px,color:#2E7D32
     classDef setupClass fill:#E3F2FD,stroke:#2196F3,stroke-width:2px,color:#1565C0
     classDef decisionClass fill:#FFF3E0,stroke:#FF9800,stroke-width:2px,color:#E65100
@@ -141,6 +141,7 @@ flowchart TD
     classDef hnClass fill:#FF6600,stroke:#E55A00,stroke-width:3px,color:#FFF
     classDef bskyClass fill:#00D4FF,stroke:#0099CC,stroke-width:3px,color:#FFF
     classDef mastodonClass fill:#6364FF,stroke:#4F50CC,stroke-width:3px,color:#FFF
+    classDef githubClass fill:#24292e,stroke:#000,stroke-width:3px,color:#FFF
     classDef multiClass fill:#4CAF50,stroke:#388E3C,stroke-width:3px,color:#FFF
     classDef purgeClass fill:#F44336,stroke:#D32F2F,stroke-width:3px,color:#FFF
     classDef cacheStatusClass fill:#A5D6A7,stroke:#388E3C,stroke-width:2px,color:#1B5E20
@@ -155,13 +156,12 @@ flowchart TD
     classDef endClass fill:#FFEBEE,stroke:#E53935,stroke-width:2px,color:#C62828
     classDef refreshClass fill:#E0F2F1,stroke:#00796B,stroke-width:2px,color:#004D40
     
-    %% Apply classes to nodes
     class A startClass; class AA setupClass; class B,D,I,K,L1,O,V1,WB decisionClass
     class C menuClass; class H loopClass; class J,P,S llmClass; class L,L4 apiClass
     class M,P1 cacheClass; class L2,L5 errorClass; class N,Q dataClass
     class T,WA,WC outputClass; class Z endClass; class Y refreshClass
-    class E1 twitterClass; class E2 redditClass; class E3 hnClass; class E4 bskyClass; class E5 mastodonClass; class E6 multiClass
-    class PD purgeClass; class CS cacheStatusClass; class F,GA,G inputClass; class B1 inputClass
+    class E1 twitterClass; class E2 redditClass; class E3 hnClass; class E4 bskyClass; class E5 mastodonClass; class E6 multiClass; class E7 githubClass
+    class PD purgeClass; class CS cacheStatusClass; class F,G inputClass
 ```
 *Flowchart Description Note:* In **Offline Mode (`--offline`)**, the "Fetch Platform Data" step and the "Analyze Images" step are both *bypassed*. The analysis proceeds only with information already available in the local cache.
 </details>
@@ -169,85 +169,92 @@ flowchart TD
 ## 🛠 Installation
 
 ### Prerequisites
-*   **Python 3.8+** and Pip (for local development)
-*   **Docker and Docker Compose** (recommended for a stable, reproducible environment)
+*   **Docker and Docker Compose** (Recommended)
+*   **Python 3.11+** and Pip (for local development)
 
-### Steps
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/bm-github/owasp-social-osint-agent.git
-    cd owasp-social-osint-agent
-    ```
-2.  **Set up Configuration (`.env` file):**
-    Create a `.env` file in the project root by copying the example. Fill in your own API keys and credentials.
+### 1. Clone the Repository
+```bash
+git clone https://github.com/bm-github/owasp-social-osint-agent.git
+cd owasp-social-osint-agent
+```
 
-    ```dotenv
-    # .env
+### 2. Configure Environment Variables
+Create a `.env` file in the project root by copying the example file (`env.example`). Then, fill in your own API keys and credentials.
+```bash
+cp env.example .env
+# Now edit the .env file with your secrets
+```
 
-    # --- LLM Configuration (Required) ---
-    LLM_API_KEY="your_llm_api_key"
-    LLM_API_BASE_URL="https://api.example.com/v1" # e.g., https://openrouter.ai/api/v1
-    ANALYSIS_MODEL="your_text_analysis_model_name"
-    IMAGE_ANALYSIS_MODEL="your_vision_model_name"
+```dotenv
+# .env
 
-    # --- Optional: OpenRouter Specific Headers (if using OpenRouter) ---
-    # OPENROUTER_REFERER="http://localhost:3000"
-    # OPENROUTER_X_TITLE="owasp-social-osint-agent"
+# --- LLM Configuration (Required) ---
+LLM_API_KEY="your_llm_api_key"
+LLM_API_BASE_URL="https://api.example.com/v1" # e.g., https://openrouter.ai/api/v1
+ANALYSIS_MODEL="your_text_analysis_model_name"
+IMAGE_ANALYSIS_MODEL="your_vision_model_name"
 
-    # --- Platform API Keys (as needed) ---
-    # Twitter/X
-    TWITTER_BEARER_TOKEN="your_twitter_v2_bearer_token"
+# --- Optional: OpenRouter Specific Headers ---
+# OPENROUTER_REFERER="http://localhost:3000"
+# OPENROUTER_X_TITLE="owasp-social-osint-agent"
 
-    # Reddit
-    REDDIT_CLIENT_ID="your_reddit_client_id"
-    REDDIT_CLIENT_SECRET="your_reddit_client_secret"
-    REDDIT_USER_AGENT="YourAppName/1.0 by YourUsername"
-
-    # Bluesky
-    BLUESKY_IDENTIFIER="your-handle.bsky.social"
-    BLUESKY_APP_SECRET="xxxx-xxxx-xxxx-xxxx" # App Password
-    
-    # --- Mastodon Instances (as needed) ---
-    # Instance 1 (Set one as default for federated lookups)
-    MASTODON_INSTANCE_1_URL="https://mastodon.social"
-    MASTODON_INSTANCE_1_TOKEN="YOUR_ACCESS_TOKEN_FOR_MASTODON_SOCIAL"
-    MASTODON_INSTANCE_1_DEFAULT="true"
-
-    # Instance 2
-    MASTODON_INSTANCE_2_URL="https://another.instance.org"
-    MASTODON_INSTANCE_2_TOKEN="YOUR_ACCESS_TOKEN_FOR_THE_OTHER_INSTANCE"
-    ```
-    *Note: HackerNews does not require API keys.*
+# --- Platform API Keys (as needed) ---
+# Twitter/X
+TWITTER_BEARER_TOKEN="your_twitter_v2_bearer_token"
+# Reddit
+REDDIT_CLIENT_ID="your_reddit_client_id"
+REDDIT_CLIENT_SECRET="your_reddit_client_secret"
+REDDIT_USER_AGENT="YourAppName/1.0 by YourUsername"
+# Bluesky
+BLUESKY_IDENTIFIER="your-handle.bsky.social"
+BLUESKY_APP_SECRET="xxxx-xxxx-xxxx-xxxx"
+# GitHub
+GITHUB_TOKEN="your_github_personal_access_token"
+# Mastodon (add as many instances as you need)
+MASTODON_INSTANCE_1_URL="https://mastodon.social"
+MASTODON_INSTANCE_1_TOKEN="YOUR_ACCESS_TOKEN_FOR_MASTODON_SOCIAL"
+MASTODON_INSTANCE_1_DEFAULT="true"
+```
+*Note: HackerNews does not require API keys. GitHub can run in a limited, unauthenticated mode but a token is recommended.*
 
 ## 🚀 Usage
 
-### Recommended: Docker Mode
+There are two ways to run the agent: via Docker (recommended) or locally in a Python environment.
 
-This is the most stable and reproducible way to run the agent.
+### Recommended: Docker Mode
+This is the most stable and reproducible way to run the agent. It ensures all dependencies are handled correctly.
 
 1.  **Build the Docker image:**
     ```bash
     docker-compose build
     ```
 2.  **Run in Interactive Mode:**
+    This starts the interactive command-line interface.
     ```bash
     docker-compose run --rm social-osint-agent
     ```
 3.  **Run in Programmatic Mode (via Stdin):**
+    Pipe a JSON object to the agent for automated workflows.
     ```bash
     echo '{
-      "platforms": { "hackernews": ["pg"] },
-      "query": "What are the target''s main interests?"
+      "platforms": { "hackernews": ["pg"], "github": ["torvalds"] },
+      "query": "What are the primary technical interests and contributions of these users?"
     }' | docker-compose run --rm -T social-osint-agent --stdin
     ```
 
 ### Local Development Mode
+This is useful for development and debugging if you prefer not to use Docker.
 
-1.  **Install dependencies:**
+1.  **Create a Virtual Environment (Recommended):**
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
+    ```
+2.  **Install Dependencies:**
     ```bash
     pip install -r requirements-dev.txt
     ```
-2.  **Run the script:**
+3.  **Run the Agent:**
     (Ensure your `.env` file is in the project root)
     ```bash
     python -m socialosintagent.main
@@ -262,7 +269,7 @@ This is the most stable and reproducible way to run the agent.
 
 ### Special Commands (Interactive Mode)
 Within the analysis session, you can use these commands instead of an analysis query:
-*   `loadmore [<platform/user>] <count>`: Fetch additional items for a target. If the target is unambiguous (only one user), you can omit `<platform/user>`. Examples: `loadmore 100`, `loadmore reddit/user123 50`.
+*   `loadmore [<platform/user>] <count>`: Fetch additional items for a target. If the target is unambiguous, you can omit `<platform/user>`.
 *   `refresh`: Re-fetch data for all targets, ignoring the 24-hour cache.
 *   `help`: Displays available commands.
 *   `exit`: Returns to the main platform selection menu.
@@ -274,11 +281,10 @@ Within the analysis session, you can use these commands instead of an analysis q
 *   Use the `refresh` command in interactive mode to force a re-fetch of text data. Use "Purge Data" to clear media files.
 
 ## 🤖 AI Analysis Details
-
-*   **Efficient Architecture:** The agent uses a two-phase process. It first rapidly collects all text data and downloads media from all specified targets. Only after this data gathering is complete does it begin the vision analysis phase, ensuring network requests are not blocked by slower AI processing.
-*   **Externalized Prompts:** All prompts used to guide the LLM are stored in the `prompts/` directory. This allows for easy inspection, customization, and tuning of the agent's "brain" without changing any code.
+*   **Efficient Architecture:** The agent uses a two-phase process. It first rapidly collects all text data and downloads media from all specified targets. Only after this data gathering is complete does it begin the vision analysis phase.
+*   **Externalized Prompts:** All prompts used to guide the LLM are stored in the `socialosintagent/prompts/` directory, allowing for easy customization without changing code.
 *   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt, preventing the LLM from making temporal errors due to its fixed knowledge cutoff date.
-*   **Data Synthesis:** The final analysis is performed by an LLM guided by a detailed system prompt. It synthesizes insights from the user's text, the linked image analyses, and the shared domain summary to build a comprehensive profile and answer the user's query.
+*   **Data Synthesis:** The final analysis is performed by an LLM guided by a detailed system prompt. It synthesizes insights from the user's text, image analyses, and shared domain summary to build a comprehensive profile.
 
 ## 🔒 Security Considerations
 *   **API Keys:** All secrets should be stored in the `.env` file. This file should be secured and **never** committed to version control.

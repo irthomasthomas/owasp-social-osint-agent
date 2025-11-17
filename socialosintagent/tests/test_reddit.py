@@ -17,18 +17,25 @@ def mock_praw_client(mocker):
 
     mock_submission = MagicMock()
     mock_submission.id = 's1'
+    mock_submission.author = 'reddituser'
     mock_submission.title = 'My first post'
     mock_submission.selftext = 'Hello Reddit!'
-    mock_submission.created_utc = datetime.now(timezone.utc).timestamp()
-    mock_submission.subreddit.display_name = 'testing'
-    mock_submission.url = 'http://example.com/image.jpg'
-    mock_submission.is_self = False
-    mock_submission.is_gallery = False # Important for this test case
-    mock_submission.media_metadata = None
+    mock_submission.created_utc = (datetime.now(timezone.utc).timestamp()) - 100
+    mock_submission.permalink = '/r/testing/s1'
+    mock_submission.subreddit = MagicMock(display_name='testing')
+    mock_submission.is_self = True
+
+    mock_comment = MagicMock()
+    mock_comment.id = 'c1'
+    mock_comment.author = 'reddituser'
+    mock_comment.body = 'A test comment'
+    mock_comment.created_utc = datetime.now(timezone.utc).timestamp()
+    mock_comment.permalink = '/r/testing/s1/c1'
+    mock_comment.subreddit = MagicMock(display_name='testing')
 
     client.redditor.return_value = mock_redditor
     mock_redditor.submissions.new.return_value = [mock_submission]
-    mock_redditor.comments.new.return_value = []
+    mock_redditor.comments.new.return_value = [mock_comment]
     
     return client
 
@@ -46,16 +53,24 @@ def test_reddit_fetch_data_cache_miss(mock_praw_client, mock_cache, mocker):
     mocker.patch('socialosintagent.platforms.reddit.download_media', return_value=None)
 
     # Act
-    # REFACTOR: The llm argument is removed from the call
     result = reddit_fetcher.fetch_data(
         client=mock_praw_client,
         username='reddituser',
-        cache=mock_cache
+        cache=mock_cache,
+        fetch_limit=50
     )
 
     # Assert
     mock_praw_client.redditor.assert_called_with('reddituser')
     assert result is not None
-    assert len(result['submissions']) == 1
-    assert result['submissions'][0]['title'] == 'My first post'
+    assert len(result['posts']) == 2 # 1 submission + 1 comment
+    assert result['profile']['username'] == 'reddituser'
+    
+    # Check that both post types were normalized correctly
+    submission_post = next(p for p in result['posts'] if p['type'] == 'submission')
+    comment_post = next(p for p in result['posts'] if p['type'] == 'comment')
+
+    assert 'My first post' in submission_post['text']
+    assert 'A test comment' in comment_post['text']
+    
     mock_cache.save.assert_called_once()

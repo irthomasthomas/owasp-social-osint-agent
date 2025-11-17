@@ -10,20 +10,22 @@ from socialosintagent.platforms import twitter as twitter_fetcher
 
 @pytest.fixture
 def mock_tweepy_client(mocker):
-    client = mocker.MagicMock()
+    client = mocker.MagicMock(spec=tweepy.Client)
+    client.bearer_token = "fake_bearer_token"
+    
     mock_user = MagicMock(
         id=12345, name="Test User", username="testuser",
         created_at=datetime(2022, 1, 1, tzinfo=timezone.utc),
-        public_metrics={"followers_count": 100} 
+        public_metrics={"followers_count": 100, "following_count": 50, "tweet_count": 10},
+        description="A test user"
     )
     mock_tweet = MagicMock(spec=tweepy.Tweet)
     mock_tweet.id = 54321
+    mock_tweet.author_id = 12345
     mock_tweet.text = "Hello world!"
     mock_tweet.created_at = datetime.now(timezone.utc) - timedelta(hours=1)
     mock_tweet.public_metrics = {}
     mock_tweet.attachments = None
-    mock_tweet.entities = {}
-    mock_tweet.referenced_tweets = None
     mock_tweet.in_reply_to_user_id = None
     
     client.get_user.return_value = MagicMock(data=mock_user)
@@ -36,9 +38,8 @@ def mock_tweepy_client(mocker):
 def mock_cache(mocker):
     return mocker.MagicMock()
 
-
 def test_fetch_data_cache_miss(mock_tweepy_client, mock_cache):
-    """Test fetch_data when no cache exists (cache miss)."""
+    """Test fetch_data when no cache exists."""
     # Arrange
     mock_cache.load.return_value = None
     mock_cache.is_offline = False
@@ -56,37 +57,31 @@ def test_fetch_data_cache_miss(mock_tweepy_client, mock_cache):
     # Assert
     mock_cache.load.assert_called_once_with("twitter", username)
     mock_tweepy_client.get_user.assert_called_once()
-    mock_tweepy_client.get_users_tweets.assert_called_once()
+    mock_tweepy_client.get_users_tweets.assert_called()
     mock_cache.save.assert_called_once()
     assert result is not None
-    assert len(result["tweets"]) == 1
-    assert result["tweets"][0]["text"] == "Hello world!"
+    assert len(result["posts"]) == 1
+    assert result["posts"][0]["text"] == "Hello world!"
+    assert result["profile"]["username"] == "testuser"
 
-def test_fetch_data_cache_hit_insufficient_items(mock_tweepy_client, mock_cache):
-    """Test that the API is called when the cache has fewer items than requested."""
+def test_fetch_data_cache_hit_sufficient_items(mock_tweepy_client, mock_cache):
+    """Test that API is not called when cache has enough items."""
     # Arrange
-    insufficient_cached_data = {
-        "user_info": {"id": "123"},
-        "tweets": [{"id": f"t{i}"} for i in range(20)],
+    cached_data = {
+        "profile": {"id": "123"},
+        "posts": [{"id": f"t{i}"} for i in range(50)],
     }
-    mock_cache.load.return_value = insufficient_cached_data
-    mock_cache.is_offline = False # Explicitly set is_offline to False
+    mock_cache.load.return_value = cached_data
     username = "testuser"
 
     # Act
     twitter_fetcher.fetch_data(
-        client=mock_tweepy_client,
-        username=username,
-        cache=mock_cache,
-        force_refresh=False,
-        fetch_limit=50,
+        client=mock_tweepy_client, username=username, cache=mock_cache, fetch_limit=50
     )
 
     # Assert
-    mock_cache.load.assert_called_once_with("twitter", username)
-    mock_tweepy_client.get_users_tweets.assert_called_once()
     mock_tweepy_client.get_user.assert_not_called()
-    mock_cache.save.assert_called_once()
+    mock_tweepy_client.get_users_tweets.assert_not_called()
 
 def test_user_not_found(mock_tweepy_client, mock_cache):
     """Test that UserNotFoundError is raised for a non-existent user."""

@@ -1,4 +1,3 @@
-# In a new tasks.py
 from celery import Celery
 from socialosintagent.analyzer import SocialOSINTAgent
 # ... setup agent instance ...
