@@ -150,6 +150,7 @@ class LLMAnalyzer:
                     ]
                 }],
                 max_tokens=1024,
+                temperature=0.1
             )
             return completion.choices[0].message.content.strip() if completion.choices and completion.choices[0].message.content else None
         except APIError as e:
@@ -290,7 +291,7 @@ class LLMAnalyzer:
                     {"role": "user", "content": user_prompt}
                 ],
                 max_tokens=3500,
-                temperature=0.5
+                temperature=0.1
             )
             return completion.choices[0].message.content or ""
         except APIError as e:
