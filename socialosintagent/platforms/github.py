@@ -21,6 +21,7 @@ def fetch_data(
     cache: CacheManager,
     force_refresh: bool = False,
     fetch_limit: int = DEFAULT_FETCH_LIMIT,
+    **kwargs  # REQUIRED: Absorbs 'allow_external_media' argument
 ) -> Optional[UserData]:
     token = os.getenv("GITHUB_TOKEN")
     if not token:
@@ -118,17 +119,58 @@ def _to_normalized_post(event: Dict[str, Any]) -> NormalizedPost:
 def _format_event_details(event, payload, repo_name) -> tuple[str, str]:
     event_type = event["type"]
     text, url = f"Performed an event of type {event_type} on {repo_name}", f"https://github.com/{repo_name}"
+
     if event_type == "PushEvent":
-        commit_count = len(payload.get("commits", []))
-        text = f"Pushed {commit_count} commit(s) to {repo_name}"
-        if commit_count > 0 and "url" in payload["commits"][0]:
-            url = payload["commits"][0]["url"].replace("api.", "").replace("/repos", "").replace("/commits", "/commit")
+        commits = payload.get("commits", [])
+        commit_count = len(commits)
+        ref = payload.get("ref", "") # e.g., "refs/heads/main"
+        
+        if commits:
+            commit_messages = [
+                f"  - {c.get('sha', '')[:7]}: {c.get('message', 'No message').splitlines()[0]}"
+                for c in commits
+            ]
+            text = (f"Pushed {commit_count} commit(s) to branch '{ref.split('/')[-1]}' in {repo_name}:\n" +
+                    "\n".join(commit_messages))
+            if "url" in commits[0]:
+                url = commits[0]["url"].replace("api.", "").replace("/repos", "").replace("/commits", "/commit")
+        else:
+            # This is where we handle the "0 commit" events intelligently
+            branch_name = ref.split('/')[-1]
+            # 'before' SHA of all zeros indicates branch creation
+            if payload.get("before", "").startswith("0000000"):
+                text = f"Created new branch '{branch_name}' in {repo_name}"
+                url = f"https://github.com/{repo_name}/tree/{branch_name}"
+            # 'deleted' flag being true indicates branch deletion
+            elif payload.get("deleted", False):
+                 text = f"Deleted branch '{branch_name}' from {repo_name}"
+            else:
+                 # A fallback for other non-commit push events
+                 text = f"Performed a branch update on '{branch_name}' in {repo_name}"
+
+    elif event_type == "CreateEvent":
+        ref_type = payload.get("ref_type", "item")
+        ref_name = payload.get("ref")
+        if ref_type == "repository":
+            text = f"Created new repository: {repo_name}"
+        elif ref_type == "branch":
+            text = f"Created new branch '{ref_name}' in {repo_name}"
+        else:
+            text = f"Created a new {ref_type} in {repo_name}"
+
+    elif event_type == "DeleteEvent":
+        ref_type = payload.get("ref_type", "item")
+        ref_name = payload.get("ref")
+        text = f"Deleted {ref_type} '{ref_name}' from {repo_name}"
+
     elif event_type in ["IssueCommentEvent", "IssuesEvent"]:
         action, issue = payload.get("action", "commented on"), payload.get("issue", {})
         text = f"{action.capitalize()} issue #{issue.get('number')} in {repo_name}: {issue.get('title', '')}"
         url = issue.get("html_url", url)
+
     elif event_type in ["PullRequestEvent", "PullRequestReviewCommentEvent", "PullRequestReviewEvent"]:
         action, pr = payload.get("action", "interacted with"), payload.get("pull_request", {})
         text = f"{action.capitalize()} pull request #{pr.get('number')} in {repo_name}: {pr.get('title', '')}"
         url = pr.get("html_url", url)
+
     return text, url

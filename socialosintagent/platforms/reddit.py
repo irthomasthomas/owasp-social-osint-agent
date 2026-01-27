@@ -16,11 +16,11 @@ logger = logging.getLogger("SocialOSINTAgent.platforms.reddit")
 
 DEFAULT_FETCH_LIMIT = 50
 
-def _extract_media_from_submission(submission: Any, cache: CacheManager) -> List[NormalizedMedia]:
+def _extract_media_from_submission(submission: Any, cache: CacheManager, allow_external: bool) -> List[NormalizedMedia]:
     media_items: List[NormalizedMedia] = []
     # Direct media link
     if any(submission.url.lower().endswith(ext) for ext in SUPPORTED_IMAGE_EXTENSIONS + [".mp4", ".webm"]):
-        media_path = download_media(cache.base_dir, submission.url, cache.is_offline, "reddit")
+        media_path = download_media(cache.base_dir, submission.url, cache.is_offline, "reddit", allow_external=allow_external)
         if media_path:
             item_type = "image" if media_path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS else "video"
             media_items.append(NormalizedMedia(type=item_type, url=submission.url, local_path=str(media_path)))
@@ -29,7 +29,7 @@ def _extract_media_from_submission(submission: Any, cache: CacheManager) -> List
         for _, media_item in submission.media_metadata.items():
             if 's' in media_item and 'u' in media_item['s']:
                 url = media_item['s']['u']
-                media_path = download_media(cache.base_dir, url, cache.is_offline, "reddit")
+                media_path = download_media(cache.base_dir, url, cache.is_offline, "reddit", allow_external=allow_external)
                 if media_path:
                     media_items.append(NormalizedMedia(type="image", url=url, local_path=str(media_path)))
     return media_items
@@ -40,6 +40,7 @@ def fetch_data(
     cache: CacheManager,
     force_refresh: bool = False,
     fetch_limit: int = DEFAULT_FETCH_LIMIT,
+    allow_external_media: bool = False,
 ) -> Optional[UserData]:
     """Fetches submissions and comments for a Reddit user and normalizes them."""
     
@@ -84,12 +85,12 @@ def fetch_data(
             # Combine and normalize
             for s in submissions:
                 if s.id not in post_ids:
-                    all_posts.append(_to_normalized_post(s, "submission", cache))
+                    all_posts.append(_to_normalized_post(s, "submission", cache, allow_external_media))
                     post_ids.add(s.id)
 
             for c in comments:
                 if c.id not in post_ids:
-                    all_posts.append(_to_normalized_post(c, "comment", cache))
+                    all_posts.append(_to_normalized_post(c, "comment", cache, allow_external_media))
                     post_ids.add(c.id)
 
         final_posts = sorted(all_posts, key=lambda x: get_sort_key(x, "created_at"), reverse=True)[:max(fetch_limit, MAX_CACHE_ITEMS)]
@@ -111,7 +112,7 @@ def fetch_data(
         logger.error(f"Unexpected error fetching Reddit data for u/{username}: {e}", exc_info=True)
         return None
 
-def _to_normalized_post(item: Any, item_type: str, cache: CacheManager) -> NormalizedPost:
+def _to_normalized_post(item: Any, item_type: str, cache: CacheManager, allow_external: bool) -> NormalizedPost:
     """Converts a PRAW submission or comment object to a NormalizedPost."""
     if item_type == "submission":
         return NormalizedPost(
@@ -120,7 +121,7 @@ def _to_normalized_post(item: Any, item_type: str, cache: CacheManager) -> Norma
             created_at=datetime.fromtimestamp(item.created_utc, tz=timezone.utc),
             author_username=str(item.author),
             text=f"Title: {item.title}\n\n{item.selftext}",
-            media=_extract_media_from_submission(item, cache),
+            media=_extract_media_from_submission(item, cache, allow_external),
             external_links=[item.url] if not item.is_self else [],
             post_url=f"https://www.reddit.com{item.permalink}",
             metrics={"score": item.score, "comment_count": item.num_comments},

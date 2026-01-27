@@ -21,8 +21,11 @@ def fetch_data(
     cache: CacheManager,
     force_refresh: bool = False,
     fetch_limit: int = DEFAULT_FETCH_LIMIT,
+    allow_external_media: bool = False,
 ) -> Optional[UserData]:
+ 
     fetch_limit = max(fetch_limit, MIN_API_FETCH_LIMIT)
+    
     cached_data = cache.load("twitter", username)
 
     if cache.is_offline: return cached_data
@@ -79,7 +82,7 @@ def fetch_data(
                 new_tweets_found = 0
                 for tweet in tweets_response.data:
                     if str(tweet.id) not in processed_post_ids:
-                        all_posts.append(_to_normalized_post(tweet, media_dict, cache, auth_details))
+                        all_posts.append(_to_normalized_post(tweet, media_dict, cache, auth_details, allow_external_media))
                         processed_post_ids.add(str(tweet.id))
                         new_tweets_found += 1
 
@@ -106,7 +109,7 @@ def fetch_data(
         logger.error(f"Unexpected error fetching Twitter data for @{username}: {e}", exc_info=True)
         return None
 
-def _to_normalized_post(tweet: tweepy.Tweet, media_dict: Dict, cache: CacheManager, auth: Dict) -> NormalizedPost:
+def _to_normalized_post(tweet: tweepy.Tweet, media_dict: Dict, cache: CacheManager, auth: Dict, allow_external: bool) -> NormalizedPost:
     media_items: List[NormalizedMedia] = []
     if tweet.attachments and "media_keys" in tweet.attachments:
         for key in tweet.attachments["media_keys"]:
@@ -114,8 +117,9 @@ def _to_normalized_post(tweet: tweepy.Tweet, media_dict: Dict, cache: CacheManag
             if media:
                 url = media.url if media.type in ["photo", "gif"] and media.url else media.preview_image_url
                 if url:
-                    path = download_media(cache.base_dir, url, cache.is_offline, "twitter", auth)
-                    if path: media_items.append(NormalizedMedia(url=url, local_path=str(path), type=media.type))
+                    path = download_media(cache.base_dir, url, cache.is_offline, "twitter", auth, allow_external)
+                    if path: 
+                        media_items.append(NormalizedMedia(url=url, local_path=str(path), type=media.type))
 
     return NormalizedPost(
         platform="twitter", id=str(tweet.id), created_at=tweet.created_at,

@@ -22,6 +22,7 @@ def fetch_data(
     cache: CacheManager,
     force_refresh: bool = False,
     fetch_limit: int = DEFAULT_FETCH_LIMIT,
+    **kwargs
 ) -> Optional[UserData]:
     """Fetches user activity from HackerNews via Algolia API and normalizes it."""
     

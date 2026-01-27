@@ -21,6 +21,7 @@ def fetch_data(
     cache: CacheManager,
     force_refresh: bool = False,
     fetch_limit: int = DEFAULT_FETCH_LIMIT,
+    allow_external_media: bool = False,
 ) -> Optional[UserData]:
     cached_data = cache.load("bluesky", username)
     if cache.is_offline:
@@ -63,7 +64,7 @@ def fetch_data(
                 for feed_item in response.feed:
                     post = feed_item.post
                     if post.uri not in processed_post_ids:
-                        all_posts.append(_to_normalized_post(post, cache, client))
+                        all_posts.append(_to_normalized_post(post, cache, client, allow_external_media))
                         processed_post_ids.add(post.uri)
                         new_posts_found += 1
 
@@ -86,7 +87,7 @@ def fetch_data(
         logger.error(f"Unexpected error fetching Bluesky data for {username}: {e}", exc_info=True)
         return None
 
-def _to_normalized_post(post: Any, cache: CacheManager, client: Client) -> NormalizedPost:
+def _to_normalized_post(post: Any, cache: CacheManager, client: Client, allow_external: bool) -> NormalizedPost:
     record = cast(Any, post.record)
     media_items: List[NormalizedMedia] = []
     
@@ -101,7 +102,7 @@ def _to_normalized_post(post: Any, cache: CacheManager, client: Client) -> Norma
             if (img_blob := getattr(image_info, "image", None)) and (cid := getattr(img_blob, "cid", None)):
                 mime_type = getattr(img_blob, "mime_type", "image/jpeg").split('/')[-1]
                 cdn_url = f"https://cdn.bsky.app/img/feed_fullsize/plain/{post.author.did}/{quote_plus(str(cid))}@{mime_type}"
-                if path := download_media(cache.base_dir, cdn_url, cache.is_offline, "bluesky", auth_details):
+                if path := download_media(cache.base_dir, cdn_url, cache.is_offline, "bluesky", auth_details, allow_external):
                     media_items.append(NormalizedMedia(url=cdn_url, local_path=str(path), type="image"))
 
     return NormalizedPost(

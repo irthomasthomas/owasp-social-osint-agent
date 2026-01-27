@@ -154,7 +154,14 @@ class SocialOSINTAgent:
                         client = self.client_manager.get_platform_client(platform)
                         limit = fetch_options.get("targets", {}).get(f"{platform}:{username}", {}).get("count", default_count)
                         
-                        kwargs = {'username': username, 'cache': self.cache, 'force_refresh': force_refresh, 'fetch_limit': limit}
+                        kwargs = {
+                                'username': username, 
+                                'cache': self.cache, 
+                                'force_refresh': force_refresh, 
+                                'fetch_limit': limit,
+                                'allow_external_media': self.args.unsafe_allow_external_media
+                            }
+
                         # Conditionally add API clients based on platform requirements.
                         # This avoids passing unnecessary arguments to fetchers like GitHub or HackerNews.
                         platforms_requiring_client = ["twitter", "reddit", "bluesky"]

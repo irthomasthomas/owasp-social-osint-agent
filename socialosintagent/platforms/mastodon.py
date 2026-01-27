@@ -22,7 +22,8 @@ def fetch_data(
     username: str,
     cache: CacheManager,
     force_refresh: bool = False,
-    fetch_limit: int = DEFAULT_FETCH_LIMIT
+    fetch_limit: int = DEFAULT_FETCH_LIMIT,
+    allow_external_media: bool = False,
 ) -> Optional[UserData]:
     """Fetches statuses and user info for a Mastodon user and normalizes them."""
     
@@ -74,7 +75,7 @@ def fetch_data(
             statuses = client_to_use.account_statuses(id=user_id, limit=min(fetch_limit, 40))
             for status in statuses:
                 if str(status['id']) not in post_ids:
-                    all_posts.append(_to_normalized_post(status, cache, profile_obj['username']))
+                    all_posts.append(_to_normalized_post(status, cache, profile_obj['username'], allow_external_media))
                     post_ids.add(str(status['id']))
 
         final_posts = sorted(all_posts, key=lambda x: get_sort_key(x, "created_at"), reverse=True)[:max(fetch_limit, MAX_CACHE_ITEMS)]
@@ -96,11 +97,11 @@ def fetch_data(
         logger.error(f"Unexpected error fetching Mastodon data for {username}: {e}", exc_info=True)
         return None
 
-def _to_normalized_post(status: Dict[str, Any], cache: CacheManager, author_username: str) -> NormalizedPost:
+def _to_normalized_post(status: Dict[str, Any], cache: CacheManager, author_username: str, allow_external: bool) -> NormalizedPost:
     cleaned_text = BeautifulSoup(status["content"], "html.parser").get_text(separator=" ", strip=True)
     media_items: List[NormalizedMedia] = []
     for att in status.get("media_attachments", []):
-        if path := download_media(cache.base_dir, att["url"], cache.is_offline, "mastodon"):
+        if path := download_media(cache.base_dir, att["url"], cache.is_offline, "mastodon", allow_external=allow_external):
             media_items.append(NormalizedMedia(url=att["url"], local_path=str(path), type=att["type"]))
 
     return NormalizedPost(
