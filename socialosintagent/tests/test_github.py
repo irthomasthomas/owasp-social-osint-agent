@@ -29,24 +29,28 @@ def mock_httpx_client(mocker):
     }]
     
     mock_request = MagicMock()
-    mock_profile_response = httpx.Response(
-        200,
-        json=profile_data,
-        headers={'x-ratelimit-remaining': '5000'},
-        request=mock_request
-    )
-    mock_events_response = httpx.Response(
-        200,
-        json=event_data,
-        headers={'x-ratelimit-remaining': '4999'},
-        request=mock_request
-    )
     
     def get_side_effect(url, params=None):
         if 'events/public' in url:
-            return mock_events_response
+            # FIX: If page > 1, return empty list to stop the while loop
+            if params and params.get("page", 1) > 1:
+                return httpx.Response(200, json=[], request=mock_request)
+            
+            return httpx.Response(
+                200,
+                json=event_data,
+                headers={'x-ratelimit-remaining': '4999'},
+                request=mock_request
+            )
+        
         if '/users/' in url:
-            return mock_profile_response
+            return httpx.Response(
+                200,
+                json=profile_data,
+                headers={'x-ratelimit-remaining': '5000'},
+                request=mock_request
+            )
+            
         return httpx.Response(404, request=mock_request)
 
     mock_client_instance.get.side_effect = get_side_effect

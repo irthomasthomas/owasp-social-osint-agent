@@ -6,13 +6,19 @@
 
 ## 🌟 Key Features
 
-✅ **Multi-Platform Data Collection:** Aggregates data from Twitter/X, Reddit, Bluesky, GitHub, Hacker News, and Mastodon.
+✅ **Multi-Platform Data Collection:** Aggregates data from Twitter/X, Reddit, Bluesky, GitHub, Hacker News, and Mastodon. Captures immutable identifiers (e.g., Bluesky DIDs) to ensure targets can be tracked even if they change their handles.
+
+✅ **High-Fidelity OSINT Extraction:** Goes beyond basic text to capture platform-specific intelligence, including GitHub commit messages/star events, Reddit karma breakdowns/subreddit contexts, Twitter location/verified status, and HackerNews user reputation.
 
 ✅ **AI-Powered Analysis:** Utilises configurable models via OpenAI-compatible APIs for sophisticated text and image analysis. Employs externalized, easily editable prompt files.
 
 ✅ **Efficient Two-Phase Analysis:** The agent first fetches all textual data and downloads all media across all targets. Only after all data collection is complete does it begin the (slower) vision analysis phase, ensuring maximum efficiency.
 
 ✅ **Cross-Account Comparison:** Analyze profiles across multiple selected platforms simultaneously.
+
+✅ **Context-Aware Media Security:** Employs a "Safe CDN" filter to prevent accidental downloads from potentially malicious servers. For decentralized platforms like Mastodon, the agent dynamically trusts the user's home instance while blocking untrusted external hosts. Safe lists can be expanded via .env or bypassed using the --unsafe-allow-external-media flag.
+
+✅ **Indirect Injection Mitigation:** Robustly wraps untrusted social media data in structured XML tags within the LLM prompt. This clarifies the boundary between "system instructions" and "untrusted data," helping to mitigate indirect prompt injection attacks hidden in social posts or image descriptions.
 
 ✅ **Accurate Temporal Analysis:** Injects the current, real-world UTC timestamp into every analysis prompt, forcing the LLM to understand the timeline of events correctly.
 
@@ -266,6 +272,7 @@ This is useful for development and debugging if you prefer not to use Docker.
 *   `--no-auto-save`: Disable automatic saving of reports.
 *   `--log-level [DEBUG|INFO|WARNING|ERROR|CRITICAL]`: Set the logging level (default: `WARNING`).
 *   `--offline`: Run in offline mode. Uses only cached data.
+*   `--unsafe-allow-external-media`: **Security:** Allow downloading media from domains outside of known social media CDNs (e.g., personal servers or third-party websites).
 
 ### Special Commands (Interactive Mode)
 Within the analysis session, you can use these commands instead of an analysis query:

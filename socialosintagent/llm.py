@@ -19,11 +19,9 @@ from urllib.parse import urlparse
 
 import httpx
 from openai import APIError, OpenAI, RateLimitError
-from PIL import Image
 
 from .exceptions import RateLimitExceededError
-from .utils import (SUPPORTED_IMAGE_EXTENSIONS, UserData,
-                    extract_and_resolve_urls, get_sort_key)
+from .utils import (SUPPORTED_IMAGE_EXTENSIONS, UserData, get_sort_key)
 
 logger = logging.getLogger("SocialOSINTAgent.llm")
 _CURRENT_DIR = Path(__file__).parent
@@ -100,11 +98,12 @@ class LLMAnalyzer:
         """
         Analyzes a single image using a vision-capable LLM.
 
-        The method handles image pre-processing (resizing, converting) before
-        sending it to the LLM.
+        Expects a preprocessed image file (JPEG, RGB) as produced by
+        ImageProcessor.preprocess_image(). It encodes the file and sends
+        it to the vision model.
 
         Args:
-            file_path: The local path to the image file.
+            file_path: The local path to the preprocessed image file.
             source_url: The original URL of the image, for context.
             context: Additional context about the image (e.g., who posted it).
 
@@ -117,26 +116,8 @@ class LLMAnalyzer:
         if self.is_offline or not file_path.exists() or file_path.suffix.lower() not in SUPPORTED_IMAGE_EXTENSIONS:
             return None
         
-        temp_path = None
         try:
-            # Pre-process image to ensure compatibility and reasonable size
-            with Image.open(file_path) as img:
-                img_to_process = img
-                if getattr(img, "is_animated", False):
-                    img.seek(0)
-                    img_to_process = img.copy()
-                if img_to_process.mode != "RGB":
-                    img_to_process = img_to_process.convert("RGB")
-                
-                max_dim = 1536
-                if max(img_to_process.size) > max_dim:
-                    img_to_process.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
-                
-                # Save to a temporary JPEG for consistent encoding
-                temp_path = file_path.with_suffix(".processed.jpg")
-                img_to_process.save(temp_path, "JPEG", quality=85)
-
-            base64_image = base64.b64encode(temp_path.read_bytes()).decode("utf-8")
+            base64_image = base64.b64encode(file_path.read_bytes()).decode("utf-8")
             prompt_text = self.image_analysis_prompt_template.format(context=context)
             model = os.environ["IMAGE_ANALYSIS_MODEL"]
             
@@ -158,9 +139,6 @@ class LLMAnalyzer:
                 raise RateLimitExceededError("LLM Image Analysis", original_exception=e)
             logger.error(f"LLM API error during image analysis for {file_path}: {e}")
             return None
-        finally:
-            if temp_path and temp_path.exists():
-                temp_path.unlink()
 
     def _format_user_data_summary(self, user_data: UserData) -> str:
         """

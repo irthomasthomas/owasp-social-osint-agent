@@ -1,176 +1,73 @@
-import logging
-import os
-from datetime import datetime, timezone
+import logging, os, httpx
 from typing import Any, Dict, List, Optional
+from .base_fetcher import BaseFetcher, RateLimitHandler
+from ..utils import NormalizedPost, NormalizedProfile, UserData, get_sort_key, extract_and_resolve_urls
 
-import httpx
+class GitHubFetcher(BaseFetcher):
+    def __init__(self):
+        super().__init__(platform_name="github")
+        self.base_url = "https://api.github.com"
 
-from ..cache import MAX_CACHE_ITEMS, CacheManager
-from ..exceptions import (AccessForbiddenError, RateLimitExceededError,
-                         UserNotFoundError)
-from ..utils import (NormalizedPost, NormalizedProfile, UserData,
-                     extract_and_resolve_urls, get_sort_key)
-
-logger = logging.getLogger("SocialOSINTAgent.platforms.github")
-
-DEFAULT_FETCH_LIMIT = 50
-GITHUB_API_BASE_URL = "https://api.github.com"
-
-def fetch_data(
-    username: str,
-    cache: CacheManager,
-    force_refresh: bool = False,
-    fetch_limit: int = DEFAULT_FETCH_LIMIT,
-    **kwargs  # REQUIRED: Absorbs 'allow_external_media' argument
-) -> Optional[UserData]:
-    token = os.getenv("GITHUB_TOKEN")
-    if not token:
-        logger.warning("GITHUB_TOKEN is not set. Using unauthenticated requests with lower rate limits.")
-
-    cached_data = cache.load("github", username)
-    if cache.is_offline:
-        return cached_data
-
-    if not force_refresh and cached_data and len(cached_data.get("posts", [])) >= fetch_limit:
-        return cached_data
-
-    logger.info(f"Fetching GitHub data for {username} (Limit: {fetch_limit})")
-    
-    headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": "SocialOSINTAgent"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    try:
-        with httpx.Client(headers=headers, timeout=20.0, follow_redirects=True) as client:
-            profile_obj = cached_data.get("profile") if not force_refresh and cached_data else None
-            
-            if not profile_obj:
-                profile_resp = client.get(f"{GITHUB_API_BASE_URL}/users/{username}")
-                _check_response_for_errors(profile_resp)
-                profile_data = profile_resp.json()
-                profile_obj = NormalizedProfile(
-                    platform="github", id=str(profile_data["id"]), username=profile_data["login"],
-                    display_name=profile_data.get("name"), bio=profile_data.get("bio"),
-                    created_at=get_sort_key(profile_data, "created_at"), profile_url=profile_data["html_url"],
-                    metrics={
-                        "followers": profile_data.get("followers", 0), "following": profile_data.get("following", 0),
-                        "public_repos": profile_data.get("public_repos", 0),
-                    }
+    def _get_or_fetch_profile(self, username: str, cached_data: Optional[UserData], force_refresh: bool, **kwargs) -> Optional[NormalizedProfile]:
+        if not force_refresh and cached_data and cached_data.get("profile"): return cached_data["profile"]
+        headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": "SocialOSINTAgent"}
+        if tk := os.getenv("GITHUB_TOKEN"): headers["Authorization"] = f"Bearer {tk}"
+        try:
+            with httpx.Client(headers=headers, timeout=20.0) as client:
+                resp = client.get(f"{self.base_url}/users/{username}")
+                RateLimitHandler.check_response_headers(resp.headers, "github")
+                resp.raise_for_status()
+                d = resp.json()
+                return NormalizedProfile(
+                    platform="github", id=str(d["id"]), username=d["login"],
+                    display_name=d.get("name"), bio=d.get("bio"),
+                    created_at=get_sort_key(d, "created_at"), profile_url=d["html_url"],
+                    metrics={"followers": d.get("followers", 0), "repos": d.get("public_repos", 0)}
                 )
-            
-            all_posts: List[NormalizedPost] = cached_data.get("posts", []) if not force_refresh and cached_data else []
-            processed_post_ids = {p['id'] for p in all_posts}
-            
-            needed_count = fetch_limit - len(all_posts)
-            if force_refresh or needed_count > 0:
-                page = 1
-                while len(all_posts) < fetch_limit:
-                    events_resp = client.get(
-                        f"{GITHUB_API_BASE_URL}/users/{username}/events/public",
-                        params={"per_page": min(fetch_limit, 100), "page": page}
-                    )
-                    _check_response_for_errors(events_resp)
-                    events_data = events_resp.json()
-                    if not events_data: break
+        except Exception as e: self._handle_api_error(e, username)
 
-                    new_posts_found = 0
-                    for event in events_data:
-                        if event["id"] not in processed_post_ids:
-                            all_posts.append(_to_normalized_post(event))
-                            processed_post_ids.add(event["id"])
-                            new_posts_found += 1
-                    
-                    if new_posts_found == 0:
-                        break
+    def _fetch_posts(self, username: str, profile: NormalizedProfile, needed_count: int, processed_ids: set, **kwargs) -> List[NormalizedPost]:
+        headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": "SocialOSINTAgent"}
+        if tk := os.getenv("GITHUB_TOKEN"): headers["Authorization"] = f"Bearer {tk}"
+        new_posts, page = [], 1
+        try:
+            with httpx.Client(headers=headers, timeout=20.0) as client:
+                while len(new_posts) < needed_count:
+                    resp = client.get(f"{self.base_url}/users/{username}/events/public", params={"per_page": 100, "page": page})
+                    RateLimitHandler.check_response_headers(resp.headers, "github")
+                    resp.raise_for_status()
+                    events = resp.json()
+                    if not events: break
+                    for ev in events:
+                        if ev["id"] not in processed_ids:
+                            new_posts.append(self._normalize_event(ev))
+                            processed_ids.add(ev["id"])
                     page += 1
+        except Exception as e: self._handle_api_error(e, username)
+        return new_posts
 
-            final_posts = sorted(all_posts, key=lambda x: x['created_at'], reverse=True)[:max(fetch_limit, MAX_CACHE_ITEMS)]
-            user_data = UserData(profile=profile_obj, posts=final_posts)
-            cache.save("github", username, user_data)
-            return user_data
-
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404: raise UserNotFoundError(f"GitHub user '{username}' not found.") from e
-        elif e.response.status_code == 403: raise AccessForbiddenError(f"Access to GitHub user '{username}' is forbidden or rate-limited.") from e
-        else:
-            logger.error(f"HTTP error fetching GitHub data for {username}: {e}", exc_info=True)
-            return None
-    except Exception as e:
-        if not isinstance(e, (UserNotFoundError, RateLimitExceededError, AccessForbiddenError)):
-             logger.error(f"Unexpected error fetching GitHub data for {username}: {e}", exc_info=True)
-        raise
-
-def _check_response_for_errors(response: httpx.Response):
-    if 'x-ratelimit-remaining' in response.headers and int(response.headers['x-ratelimit-remaining']) == 0:
-        reset_timestamp = int(response.headers['x-ratelimit-reset'])
-        raise RateLimitExceededError(f"GitHub API rate limit exceeded. Resets at {datetime.fromtimestamp(reset_timestamp, tz=timezone.utc).isoformat()}")
-    response.raise_for_status()
-
-def _to_normalized_post(event: Dict[str, Any]) -> NormalizedPost:
-    payload = event.get("payload", {})
-    repo_name = event.get("repo", {}).get("name", "")
-    text, url = _format_event_details(event, payload, repo_name)
-    return NormalizedPost(
-        platform="github", id=event["id"], created_at=get_sort_key(event, "created_at"),
-        author_username=event["actor"]["login"], text=text, media=[], external_links=extract_and_resolve_urls(text),
-        post_url=url, metrics={}, type=event["type"], context={"repo": repo_name}
-    )
-
-def _format_event_details(event, payload, repo_name) -> tuple[str, str]:
-    event_type = event["type"]
-    text, url = f"Performed an event of type {event_type} on {repo_name}", f"https://github.com/{repo_name}"
-
-    if event_type == "PushEvent":
-        commits = payload.get("commits", [])
-        commit_count = len(commits)
-        ref = payload.get("ref", "") # e.g., "refs/heads/main"
+    def _normalize_event(self, ev: Dict) -> NormalizedPost:
+        etype = ev["type"]
+        repo = ev.get("repo", {}).get("name", "unknown")
+        payload = ev.get("payload", {})
+        text = f"Activity on {repo}"
         
-        if commits:
-            commit_messages = [
-                f"  - {c.get('sha', '')[:7]}: {c.get('message', 'No message').splitlines()[0]}"
-                for c in commits
-            ]
-            text = (f"Pushed {commit_count} commit(s) to branch '{ref.split('/')[-1]}' in {repo_name}:\n" +
-                    "\n".join(commit_messages))
-            if "url" in commits[0]:
-                url = commits[0]["url"].replace("api.", "").replace("/repos", "").replace("/commits", "/commit")
-        else:
-            # This is where we handle the "0 commit" events intelligently
-            branch_name = ref.split('/')[-1]
-            # 'before' SHA of all zeros indicates branch creation
-            if payload.get("before", "").startswith("0000000"):
-                text = f"Created new branch '{branch_name}' in {repo_name}"
-                url = f"https://github.com/{repo_name}/tree/{branch_name}"
-            # 'deleted' flag being true indicates branch deletion
-            elif payload.get("deleted", False):
-                 text = f"Deleted branch '{branch_name}' from {repo_name}"
-            else:
-                 # A fallback for other non-commit push events
-                 text = f"Performed a branch update on '{branch_name}' in {repo_name}"
+        # Restoration of OSINT logic for GitHub events
+        if etype == "PushEvent":
+            commits = [f"- {c['sha'][:7]}: {c['message']}" for c in payload.get('commits', [])]
+            text = f"Pushed to {repo}:\n" + "\n".join(commits)
+        elif etype == "WatchEvent": text = f"Starred {repo}"
+        elif etype == "CreateEvent": text = f"Created {payload.get('ref_type')} in {repo}"
+        elif etype == "IssueCommentEvent": 
+            text = f"Commented on issue in {repo}: {payload.get('issue', {}).get('title')}"
 
-    elif event_type == "CreateEvent":
-        ref_type = payload.get("ref_type", "item")
-        ref_name = payload.get("ref")
-        if ref_type == "repository":
-            text = f"Created new repository: {repo_name}"
-        elif ref_type == "branch":
-            text = f"Created new branch '{ref_name}' in {repo_name}"
-        else:
-            text = f"Created a new {ref_type} in {repo_name}"
+        return NormalizedPost(
+            platform="github", id=ev["id"], created_at=get_sort_key(ev, "created_at"),
+            author_username=ev["actor"]["login"], text=text, media=[],
+            external_links=extract_and_resolve_urls(text),
+            post_url=f"https://github.com/{repo}", type=etype, context={"repo": repo}
+        )
 
-    elif event_type == "DeleteEvent":
-        ref_type = payload.get("ref_type", "item")
-        ref_name = payload.get("ref")
-        text = f"Deleted {ref_type} '{ref_name}' from {repo_name}"
-
-    elif event_type in ["IssueCommentEvent", "IssuesEvent"]:
-        action, issue = payload.get("action", "commented on"), payload.get("issue", {})
-        text = f"{action.capitalize()} issue #{issue.get('number')} in {repo_name}: {issue.get('title', '')}"
-        url = issue.get("html_url", url)
-
-    elif event_type in ["PullRequestEvent", "PullRequestReviewCommentEvent", "PullRequestReviewEvent"]:
-        action, pr = payload.get("action", "interacted with"), payload.get("pull_request", {})
-        text = f"{action.capitalize()} pull request #{pr.get('number')} in {repo_name}: {pr.get('title', '')}"
-        url = pr.get("html_url", url)
-
-    return text, url
+def fetch_data(**kwargs):
+    u, c = kwargs.pop("username"), kwargs.pop("cache")
+    return GitHubFetcher().fetch_data(u, c, **kwargs)

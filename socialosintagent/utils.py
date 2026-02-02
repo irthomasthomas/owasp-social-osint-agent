@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import re
+import os
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,7 +24,14 @@ SAFE_CDN_DOMAINS = {
         # but is generally considered a 'safe' CDN vs a private server.
     ],
     "bluesky": ["cdn.bsky.app", "cdn.bsky.social"],
+    "mastodon": ["mastodon.social", "files.mastodon.social"]
 }
+
+# Allow adding extra domains via .env (e.g., EXTRA_REDDIT_CDNS="i.imgur.com,custom.cdn.com")
+for platform in SAFE_CDN_DOMAINS.keys():
+    env_var = f"EXTRA_{platform.upper()}_CDNS"
+    if extra := os.getenv(env_var):
+        SAFE_CDN_DOMAINS[platform].extend([d.strip() for d in extra.split(",")])
 
 class NormalizedMedia(TypedDict, total=False):
     url: str
@@ -76,7 +84,6 @@ def get_sort_key(item: Dict[str, Any], dt_key: str) -> datetime:
     dt_val = item.get(dt_key)
     if isinstance(dt_val, str):
         try:
-            if dt_val.endswith("Z"): dt_val = dt_val[:-1] + "+00:00"
             dt_obj = datetime.fromisoformat(dt_val)
             return dt_obj if dt_obj.tzinfo else dt_obj.replace(tzinfo=timezone.utc)
         except ValueError:
@@ -146,6 +153,7 @@ def download_media(base_dir: Path, url: str, is_offline: bool, platform: str, au
 
     url_hash = hashlib.md5(url.encode()).hexdigest()
     media_dir = base_dir / "media"
+    media_dir.mkdir(parents=True, exist_ok=True)
   
     for ext in SUPPORTED_IMAGE_EXTENSIONS + [".mp4", ".webm"]:
         existing_path = media_dir / f"{url_hash}{ext}"

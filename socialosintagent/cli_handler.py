@@ -1,4 +1,3 @@
-
 """
 Handles all Command-Line Interface (CLI) interactions for the agent.
 
@@ -193,7 +192,9 @@ class CliHandler:
                             should_run_analysis = True
                         else:
                             self.console.print("[yellow]Refresh cancelled, no query entered.[/yellow]")
-                    continue
+                            continue
+                    else:
+                        continue
                 elif user_input.lower().startswith("loadmore"):
                     parts = user_input.split()
                     should_run_analysis, query_to_run, force_refresh = self._handle_loadmore_command(parts, platforms, fetch_options, last_query)
@@ -364,10 +365,19 @@ class CliHandler:
             return False, "", False
 
         target_key = f"{platform}:{username}"
-        current_count = fetch_options.get("targets", {}).get(target_key, {}).get("count", fetch_options.get("default_count", 50))
+                # Ensure the path exists
+        if "targets" not in fetch_options:
+            fetch_options["targets"] = {}
+
+        # Get current count safely
+        target_options = fetch_options["targets"].get(target_key, {})
+        current_count = target_options.get("count", fetch_options.get("default_count", 50))
+
+        # Set new count
         new_count = current_count + count_to_add
-        
-        fetch_options.setdefault("targets", {}).setdefault(target_key, {})["count"] = new_count
+        if target_key not in fetch_options["targets"]:
+            fetch_options["targets"][target_key] = {}
+        fetch_options["targets"][target_key]["count"] = new_count
         
         if last_query:
             self.console.print(f"[cyan]Updated {target_str} fetch limit to {new_count} items. Re-running last query...[/cyan]")
@@ -382,7 +392,7 @@ class CliHandler:
         query = metadata.get("query", "query")
         platforms = list(metadata.get("targets", {}).keys())
 
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         safe_q = "".join(c for c in query[:30] if c.isalnum() or c in " _-").strip() or "query"
         safe_p = "_".join(sorted(platforms)) or "platforms"
         base_filename = f"analysis_{ts}_{safe_p}_{safe_q}"
@@ -413,12 +423,12 @@ class CliHandler:
         if not data:
             return "[dim](no cache)[/dim]"
         
-        ts = data.get("timestamp")
         age_str = "date err"
-        if ts:
-            age_delta = datetime.now(timezone.utc) - get_sort_key(data, "timestamp")
+        if data.get("timestamp"):
+            cached_at = get_sort_key(data, "timestamp")
+            age_delta = datetime.now(timezone.utc) - cached_at
             is_fresh = age_delta.total_seconds() < CACHE_EXPIRY_HOURS * 3600
-            age_str = "[green]fresh[/green]" if is_fresh else f"[yellow]stale ({self._format_cache_age(ts)})[/yellow]"
+            age_str = "[green]fresh[/green]" if is_fresh else f"[yellow]stale ({self._format_cache_age(cached_at.isoformat())})[/yellow]"
         
         item_count = len(data.get("posts", []))
         return f"(cached: {item_count} items, {age_str})"
