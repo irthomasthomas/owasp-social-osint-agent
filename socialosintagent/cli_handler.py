@@ -157,68 +157,112 @@ class CliHandler:
     def _run_analysis_loop(self, platforms: Dict[str, List[str]], fetch_options: Dict[str, Any]):
         """
         The main loop for an active analysis session.
-
-        Handles user queries, special commands (`exit`, `refresh`, `loadmore`),
-        and displays analysis results.
-
-        Args:
-            platforms: The dictionary of platforms and usernames for this session.
-            fetch_options: The dictionary of fetch options for this session.
+        Uses slash commands and persistent targeting info for clarity.
         """
+        # Persistent Header Panel
         platform_info = " | ".join([f"{p.capitalize()}: {', '.join(u)}" for p, u in platforms.items()])
-        self.console.print(Panel(f"Targets: {platform_info}\nCommands: `exit`, `refresh`, `help`, `loadmore [<platform/user>] <count>`", title="🔎 Analysis Session", border_style="cyan", expand=False))
+        self.console.print("\n")
+        self.console.print(Panel(
+            f"Targeting: [bold]{platform_info}[/bold]\n"
+            f"Mode: [bold]{'OFFLINE (Cache Only)' if self.args.offline else 'ONLINE (Live API)'}[/bold]",
+            title="🔎 Active OSINT Session",
+            border_style="cyan",
+            expand=False
+        ))
+
         last_query = ""
+
         while True:
             try:
-                user_input = Prompt.ask("\n[bold green]Analysis Query>[/bold green]", default=last_query).strip()
+                # Persistent Command Footer (shown before every prompt)
+                self.console.print("[dim italic]Commands: /exit, /help, /refresh, /loadmore <count>[/dim italic]")
+                
+                user_input = Prompt.ask(
+                    "\n[bold green]Agent Query[/bold green]", 
+                    default=last_query
+                ).strip()
+
                 if not user_input:
                     continue
 
-                force_refresh, should_run_analysis, query_to_run = False, False, ""
-                
-                if user_input.lower() == "exit":
+                force_refresh = False
+                should_run_analysis = False
+                query_to_run = ""
+
+                # Handle Slash Commands
+                input_lower = user_input.lower()
+
+                if input_lower == "/exit":
                     break
-                elif user_input.lower() == "help":
-                    self.console.print(Panel("`exit`: Return to menu.\n`refresh`: Force full data fetch.\n`loadmore <count>`: Add items for a target.\n`loadmore <platform/user> <count>`: Explicitly add items for a target (e.g., `loadmore twitter/user001 100`).\n`help`: Show this message.", title="Help"))
+
+                elif input_lower in ["/help", "/?", "?"]:
+                    self._show_help_table()
                     continue
-                elif user_input.lower() == "refresh":
+
+                elif input_lower == "/refresh":
                     if self.args.offline:
-                        self.console.print("[yellow]'refresh' is unavailable in offline mode.[/yellow]")
+                        self.console.print("[yellow]'/refresh' is unavailable in offline mode.[/yellow]")
                         continue
-                    if Confirm.ask("Force refresh data for all targets? This uses more API calls.", default=False):
+                    
+                    if Confirm.ask("[yellow]Force refresh data for all targets? (Uses API calls)[/yellow]", default=False):
                         force_refresh = True
-                        query_to_run = Prompt.ask("Enter analysis query", default=last_query if last_query != "refresh" else "").strip()
+                        query_to_run = Prompt.ask("Enter query to run with refreshed data", default=last_query).strip()
                         if query_to_run:
                             should_run_analysis = True
                         else:
-                            self.console.print("[yellow]Refresh cancelled, no query entered.[/yellow]")
-                            continue
-                    else:
-                        continue
-                elif user_input.lower().startswith("loadmore"):
-                    parts = user_input.split()
-                    should_run_analysis, query_to_run, force_refresh = self._handle_loadmore_command(parts, platforms, fetch_options, last_query)
-                else:
-                    query_to_run, should_run_analysis = user_input, True
-
-                if not should_run_analysis:
+                            self.console.print("[cyan]Refresh cancelled.[/cyan]")
                     continue
-                
-                last_query = query_to_run
-                result_dict = self.agent.analyze(platforms, query_to_run, force_refresh, fetch_options, console=self.console)
-                
-                self._display_and_save_report(result_dict)
+
+                elif input_lower.startswith("/loadmore"):
+                    # Use existing parser but strip the slash first
+                    parts = user_input.replace("/", "").split()
+                    should_run_analysis, query_to_run, force_refresh = self._handle_loadmore_command(
+                        parts, platforms, fetch_options, last_query
+                    )
+
+                # Standard Query (No Slash)
+                else:
+                    if user_input.startswith("/"):
+                        self.console.print(f"[red]Unknown command: {user_input.split()[0]}. Type /help for list.[/red]")
+                        continue
+                    
+                    query_to_run = user_input
+                    should_run_analysis = True
+
+                # Execute Analysis
+                if should_run_analysis:
+                    last_query = query_to_run
+                    result_dict = self.agent.analyze(
+                        platforms, 
+                        query_to_run, 
+                        force_refresh, 
+                        fetch_options, 
+                        console=self.console
+                    )
+                    self._display_and_save_report(result_dict)
 
             except (KeyboardInterrupt, EOFError):
-                self.console.print("\n[yellow]Analysis query cancelled.[/yellow]")
-                if Confirm.ask("\nExit this analysis session?", default=False):
+                self.console.print("\n[yellow]Query cancelled.[/yellow]")
+                if Confirm.ask("Exit this analysis session?", default=False):
                     break
-                else:
-                    last_query = ""
-                    continue
+                continue
             except Exception as e:
                 logger.error(f"Error in analysis loop: {e}", exc_info=True)
-                self.console.print(f"[bold red]An unexpected error occurred: {e}[/bold red]")
+                self.console.print(f"[bold red]An error occurred: {e}[/bold red]")
+
+    def _show_help_table(self):
+        """Helper to display a clean command reference."""
+        table = Table(title="Command Reference", show_header=True, header_style="bold magenta", box=None)
+        table.add_column("Command", style="cyan")
+        table.add_column("Description", style="white")
+        
+        table.add_row("/loadmore <n>", "Fetch <n> additional items for current targets.")
+        table.add_row("/loadmore <p/u> <n>", "Fetch more for a specific platform/user (e.g. /loadmore twitter/elon 20).")
+        table.add_row("/refresh", "Ignore cache and force a fresh download from all APIs.")
+        table.add_row("/help", "Show this command reference.")
+        table.add_row("/exit", "Exit the session and return to the main menu.")
+        
+        self.console.print(Panel(table, border_style="magenta"))
 
     def _display_and_save_report(self, result_dict: Dict[str, Any]):
         """Renders the analysis report to the console and handles saving."""
