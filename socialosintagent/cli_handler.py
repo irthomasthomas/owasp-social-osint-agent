@@ -194,11 +194,9 @@ class CliHandler:
 
                 if input_lower == "/exit":
                     break
-
                 elif input_lower in ["/help", "/?", "?"]:
                     self._show_help_table()
                     continue
-
                 elif input_lower == "/refresh":
                     if self.args.offline:
                         self.console.print("[yellow]'/refresh' is unavailable in offline mode.[/yellow]")
@@ -212,7 +210,6 @@ class CliHandler:
                         else:
                             self.console.print("[cyan]Refresh cancelled.[/cyan]")
                     continue
-
                 elif input_lower.startswith("/loadmore"):
                     # Use existing parser but strip the slash first
                     parts = user_input.replace("/", "").split()
