@@ -15,6 +15,8 @@ from rich.panel import Panel
 
 from .exceptions import RateLimitExceededError
 
+logger = logging.getLogger("SocialOSINTAgent.utils")
+
 SAFE_CDN_DOMAINS = {
     "twitter": ["pbs.twimg.com", "video.twimg.com"],
     "reddit": [

@@ -1,128 +1,55 @@
 import logging
-import praw
-import prawcore
+from typing import Any, List, Optional, Tuple
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-
 from .base_fetcher import BaseFetcher
-from ..utils import (
-    SUPPORTED_IMAGE_EXTENSIONS, 
-    NormalizedMedia,
-    NormalizedPost, 
-    NormalizedProfile, 
-    UserData,
-    download_media
-)
+from ..utils import (SUPPORTED_IMAGE_EXTENSIONS, NormalizedMedia,
+                     NormalizedPost, NormalizedProfile, download_media)
 
 logger = logging.getLogger("SocialOSINTAgent.platforms.reddit")
-
 
 class RedditFetcher(BaseFetcher):
     def __init__(self):
         super().__init__(platform_name="reddit")
 
-    def _get_or_fetch_profile(
-        self, 
-        username: str, 
-        cached_data: Optional[UserData], 
-        force_refresh: bool, 
-        **kwargs
-    ) -> Optional[NormalizedProfile]:
-        # Check cache first
-        if not force_refresh and cached_data and cached_data.get("profile"):
-            return cached_data["profile"]
-        
-        client: praw.Reddit = kwargs.get("client")
-        try:
-            r = client.redditor(username)
-            return NormalizedProfile(
-                platform="reddit", 
-                id=r.id, 
-                username=r.name,
-                created_at=datetime.fromtimestamp(r.created_utc, tz=timezone.utc),
-                profile_url=f"https://reddit.com/u/{r.name}",
-                metrics={"post_karma": r.link_karma, "comment_karma": r.comment_karma}
-            )
-        except Exception as e:
-            self._handle_api_error(e, username)
-
-    def _fetch_posts(
-        self, 
-        username: str, 
-        profile: NormalizedProfile, 
-        needed_count: int, 
-        processed_ids: set, 
-        **kwargs
-    ) -> List[NormalizedPost]:
-        client = kwargs.get("client")
-        cache = kwargs.get("cache")
-        allow_ext = kwargs.get("allow_external_media", False)
-        
-        new_posts = []
-        try:
-            r = client.redditor(username)
-            
-            # Fetch and explicitly label Submissions
-            submissions = r.submissions.new(limit=needed_count)
-            for item in submissions:
-                if item.id not in processed_ids:
-                    new_posts.append(self._normalize(item, "submission", cache, allow_ext))
-                    processed_ids.add(item.id)
-            
-            # Fetch and explicitly label Comments
-            comments = r.comments.new(limit=needed_count)
-            for item in comments:
-                if item.id not in processed_ids:
-                    new_posts.append(self._normalize(item, "comment", cache, allow_ext))
-                    processed_ids.add(item.id)
-                    
-        except Exception as e: 
-            self._handle_api_error(e, username)
-            
-        return new_posts
-
-    def _normalize(
-        self, 
-        item: Any, 
-        itype: str, 
-        cache: Any, 
-        allow_ext: bool
-    ) -> NormalizedPost:
-        """Normalize Reddit submission or comment to standard format."""
-        # itype is explicitly passed as "submission" or "comment"
-        text = f"Title: {item.title}\n\n{item.selftext}" if itype == "submission" else item.body
-        media = []
-        
-        if itype == "submission" and hasattr(item, 'url'):
-            if any(item.url.lower().endswith(ex) for ex in SUPPORTED_IMAGE_EXTENSIONS):
-                p = download_media(
-                    cache.base_dir, 
-                    item.url, 
-                    cache.is_offline, 
-                    "reddit", 
-                    allow_external=allow_ext
-                )
-                if p:
-                    media.append(NormalizedMedia(url=item.url, local_path=str(p), type="image"))
-
-        return NormalizedPost(
-            platform="reddit", 
-            id=item.id, 
-            created_at=datetime.fromtimestamp(item.created_utc, tz=timezone.utc),
-            author_username=str(item.author), 
-            text=text, 
-            media=media,
-            post_url=f"https://reddit.com{item.permalink}", 
-            metrics={"score": item.score},
-            type=itype,
-            context={
-                "subreddit": str(item.subreddit.display_name) 
-                if hasattr(item.subreddit, 'display_name') 
-                else str(item.subreddit)
-            }
+    def _fetch_profile(self, username: str, **kwargs) -> Optional[NormalizedProfile]:
+        r = kwargs.get("client").redditor(username)
+        return NormalizedProfile(
+            platform="reddit", id=r.id, username=r.name,
+            created_at=datetime.fromtimestamp(r.created_utc, tz=timezone.utc),
+            profile_url=f"https://reddit.com/u/{r.name}",
+            metrics={"post_karma": r.link_karma, "comment_karma": r.comment_karma}
         )
 
+    def _fetch_batch(self, username: str, profile: NormalizedProfile, needed: int, state: Any, **kwargs) -> Tuple[List[Any], Any]:
+        if state == "done": return [], None
+        r = kwargs.get("client").redditor(username)
+        items = []
+        for item in r.submissions.new(limit=needed):
+            items.append({"data": item, "type": "submission"})
+        for item in r.comments.new(limit=needed):
+            items.append({"data": item, "type": "comment"})
+        return items, "done"
+
+    def _normalize(self, item: Any, profile: NormalizedProfile, **kwargs) -> NormalizedPost:
+        obj, itype = item["data"], item["type"]
+        cache, allow_ext = kwargs.get("cache"), kwargs.get("allow_external_media", False)
+        
+        text = f"Title: {getattr(obj, 'title', '')}\n\n{getattr(obj, 'selftext', '')}" if itype == "submission" else obj.body
+        media = []
+        
+        if itype == "submission" and hasattr(obj, 'url'):
+            if any(obj.url.lower().endswith(ex) for ex in SUPPORTED_IMAGE_EXTENSIONS):
+                p = download_media(cache.base_dir, obj.url, cache.is_offline, "reddit", allow_external=allow_ext)
+                if p: media.append(NormalizedMedia(url=obj.url, local_path=str(p), type="image"))
+
+        return NormalizedPost(
+            platform="reddit", id=obj.id, 
+            created_at=datetime.fromtimestamp(obj.created_utc, tz=timezone.utc),
+            author_username=profile["username"], text=text, media=media,
+            post_url=f"https://reddit.com{obj.permalink}", 
+            metrics={"score": obj.score}, type=itype,
+            context={"subreddit": str(obj.subreddit.display_name)}
+        )
 
 def fetch_data(**kwargs):
-    u, c = kwargs.pop("username"), kwargs.pop("cache")
-    return RedditFetcher().fetch_data(u, c, **kwargs)
+    return RedditFetcher().fetch_data(kwargs.pop("username"), kwargs.pop("cache"), **kwargs)

@@ -30,7 +30,7 @@ from .utils import (SUPPORTED_IMAGE_EXTENSIONS, UserData, handle_rate_limit,
                    sanitize_username)
 from .image_processor import ImageProcessor, ProcessingStatus
 
-logger = logging.getLogger("SocialOSINTAgent")
+logger = logging.getLogger("SocialOSINTAgent.analyzer")
 
 
 class FetchResult:

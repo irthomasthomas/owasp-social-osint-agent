@@ -12,6 +12,7 @@ from socialosintagent.cli_handler import CliHandler
 from socialosintagent.client_manager import ClientManager
 from socialosintagent.llm import LLMAnalyzer
 
+logger = logging.getLogger("SocialOSINTAgent.main")
 
 def main():
     load_dotenv()

@@ -269,11 +269,13 @@ class ImageProcessor:
             if processed_path != file_path and processed_path.exists():
                 processed_path.unlink()
             
-            self.logger.error(f"Error analyzing image {file_path}: {e}", exc_info=False)
+            self.logger.error(
+                f"Error analyzing image {file_path}: {e}", 
+                exc_info=True
+            )
             return ImageProcessingResult(
                 url=url,
                 status=ProcessingStatus.ANALYSIS_FAILED,
                 local_path=file_path,
                 error_message=str(e),
             )
-        
