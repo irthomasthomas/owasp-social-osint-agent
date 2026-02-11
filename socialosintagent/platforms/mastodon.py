@@ -1,5 +1,6 @@
 import logging
 from typing import Any, List, Optional, Tuple
+from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from .base_fetcher import BaseFetcher
 from ..utils import (NormalizedMedia, NormalizedPost, NormalizedProfile, download_media, extract_and_resolve_urls)
@@ -12,7 +13,8 @@ class MastodonFetcher(BaseFetcher):
 
     def _get_client(self, username, **kwargs):
         instance = username.split('@')[1]
-        return kwargs.get("clients", {}).get(instance) or kwargs.get("default_client")
+        instance_url = f"https://{instance}"
+        return kwargs.get("clients", {}).get(instance_url) or kwargs.get("default_client")
 
     def _fetch_profile(self, username: str, **kwargs) -> Optional[NormalizedProfile]:
         client = self._get_client(username, **kwargs)
@@ -33,11 +35,43 @@ class MastodonFetcher(BaseFetcher):
 
     def _normalize(self, status: Any, profile: NormalizedProfile, **kwargs) -> NormalizedPost:
         cache = kwargs.get("cache")
+        allow_ext = kwargs.get("allow_external_media", False)
+        
+        # Extract the instance domain to trust it dynamically
+        user_instance_domain = profile["username"].split('@')[1].lower() if '@' in profile["username"] else None
+        
         cleaned_text = BeautifulSoup(status["content"], "html.parser").get_text(separator=" ", strip=True)
         media_items = []
+        
         for att in status.get("media_attachments", []):
-            if path := download_media(cache.base_dir, att["url"], cache.is_offline, "mastodon"):
-                media_items.append(NormalizedMedia(url=att["url"], local_path=str(path), type=att["type"]))
+            media_url = att["url"]
+            media_domain = urlparse(media_url).netloc.lower()
+            
+            # Import the global list from utils
+            from ..utils import SAFE_CDN_DOMAINS
+            
+            # Check Dynamic Trust (Matches the user's home server)
+            is_internal_host = False
+            if user_instance_domain:
+                is_internal_host = media_domain == user_instance_domain or media_domain.endswith(f".{user_instance_domain}")
+            
+            # Check Static Trust (Matches the list in utils.py)
+            is_globally_safe = any(
+                media_domain == d or media_domain.endswith(f".{d}") 
+                for d in SAFE_CDN_DOMAINS.get("mastodon", [])
+            )
+            
+            # Download is allowed if ANY of these are true:
+            effective_allow_external = allow_ext or is_internal_host or is_globally_safe
+            
+            if path := download_media(
+                cache.base_dir, 
+                media_url, 
+                cache.is_offline, 
+                "mastodon", 
+                allow_external=effective_allow_external
+            ):
+                media_items.append(NormalizedMedia(url=media_url, local_path=str(path), type=att["type"]))
 
         return NormalizedPost(
             platform="mastodon", id=str(status["id"]), created_at=status["created_at"],
@@ -46,6 +80,7 @@ class MastodonFetcher(BaseFetcher):
             metrics={"likes": status["favourites_count"], "reposts": status["reblogs_count"]},
             type="repost" if status.get("reblog") else "post"
         )
+
 
 def fetch_data(**kwargs):
     return MastodonFetcher().fetch_data(kwargs.pop("username"), kwargs.pop("cache"), **kwargs)
