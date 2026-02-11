@@ -16,7 +16,9 @@
 
 ✅ **Cross-Account Comparison:** Analyze profiles across multiple selected platforms simultaneously.
 
-✅ **Context-Aware Media Security:** Employs a "Safe CDN" filter to prevent accidental downloads from potentially malicious servers. For decentralized platforms like Mastodon, the agent dynamically trusts the user's home instance while blocking untrusted external hosts. Safe lists can be expanded via .env or bypassed using the --unsafe-allow-external-media flag.
+✅ **Robust Error Handling:** Individual fetch or image analysis failures don't crash the entire pipeline. The agent gracefully degrades, providing partial results when some targets are unavailable.
+
+✅ **Unified Platform Architecture:** All platform fetchers use a consistent base class pattern, ensuring uniform error handling, pagination, and caching behavior across Twitter, Reddit, Bluesky, GitHub, Mastodon, and HackerNews.
 
 ✅ **Indirect Injection Mitigation:** Robustly wraps untrusted social media data in structured XML tags within the LLM prompt. This clarifies the boundary between "system instructions" and "untrusted data," helping to mitigate indirect prompt injection attacks hidden in social posts or image descriptions.
 
@@ -216,10 +218,28 @@ BLUESKY_IDENTIFIER="your-handle.bsky.social"
 BLUESKY_APP_SECRET="xxxx-xxxx-xxxx-xxxx"
 # GitHub
 GITHUB_TOKEN="your_github_personal_access_token"
-# Mastodon (add as many instances as you need)
+# Mastodon Multi-Instance Support
+# Configure credentials for each Mastodon instance you want to access
+# The DEFAULT instance is used as a fallback when looking up users from unconfigured instances
+# Recommendation: Set a large, well-federated instance (like mastodon.social) as default
+
 MASTODON_INSTANCE_1_URL="https://mastodon.social"
 MASTODON_INSTANCE_1_TOKEN="YOUR_ACCESS_TOKEN_FOR_MASTODON_SOCIAL"
-MASTODON_INSTANCE_1_DEFAULT="true"
+MASTODON_INSTANCE_1_DEFAULT="true"  # Use this instance for cross-instance lookups
+
+# Add more instances as needed (increment the number)
+# MASTODON_INSTANCE_2_URL="https://infosec.exchange"
+# MASTODON_INSTANCE_2_TOKEN="YOUR_ACCESS_TOKEN_FOR_INFOSEC_EXCHANGE"
+
+# MASTODON_INSTANCE_3_URL="https://fosstodon.org"
+# MASTODON_INSTANCE_3_TOKEN="YOUR_ACCESS_TOKEN_FOR_FOSSTODON"
+
+# Security: Media Download Restrictions
+# By default, only trusted CDNs are allowed. Override with additional domains:
+# EXTRA_TWITTER_CDNS="custom.cdn.example.com"
+# EXTRA_REDDIT_CDNS="i.imgur.com,custom.cdn2.com"
+# EXTRA_BLUESKY_CDNS="custom.bsky.cdn.com"
+# EXTRA_MASTODON_CDNS="media.myinstance.org"
 ```
 *Note: HackerNews does not require API keys. GitHub can run in a limited, unauthenticated mode but a token is recommended.*
 
@@ -276,10 +296,11 @@ This is useful for development and debugging if you prefer not to use Docker.
 
 ### Special Commands (Interactive Mode)
 Within the analysis session, you can use these commands instead of an analysis query:
-*   `loadmore [<platform/user>] <count>`: Fetch additional items for a target. If the target is unambiguous, you can omit `<platform/user>`.
-*   `refresh`: Re-fetch data for all targets, ignoring the 24-hour cache.
-*   `help`: Displays available commands.
-*   `exit`: Returns to the main platform selection menu.
+*   `/loadmore [<platform/user>] <count>`: Fetch additional items for a target. If the target is unambiguous, you can omit `<platform/user>`.
+*   `/refresh`: Re-fetch data for all targets, ignoring the 24-hour cache.
+*   `/help`: Displays available commands.
+*   `/exit`: Returns to the main platform selection menu.
+**Note:** Commands can be prefixed with `/` for clarity (e.g., `/help`, `/exit`), though the unprefixed versions still work for backward compatibility.
 
 ## ⚡ Cache System
 *   **Text/API Data:** Fetched platform data is cached for **24 hours** in `data/cache/` as JSON files.
@@ -292,6 +313,12 @@ Within the analysis session, you can use these commands instead of an analysis q
 *   **Externalized Prompts:** All prompts used to guide the LLM are stored in the `socialosintagent/prompts/` directory, allowing for easy customization without changing code.
 *   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt, preventing the LLM from making temporal errors due to its fixed knowledge cutoff date.
 *   **Data Synthesis:** The final analysis is performed by an LLM guided by a detailed system prompt. It synthesizes insights from the user's text, image analyses, and shared domain summary to build a comprehensive profile.
+
+## 🛡️ Error Handling & Resilience
+- **Individual Target Failures**: If one user's data can't be fetched (deleted account, rate limit, permissions), analysis continues for other targets
+- **Image Analysis Failures**: Individual image processing errors don't stop the entire vision analysis batch
+- **Rate Limit Management**: The agent detects rate limits, provides informative feedback with reset times, and continues with cached data when available
+- **Partial Results**: You'll receive analysis based on whatever data was successfully collected, with clear indication of any failures
 
 ## 🔒 Security Considerations
 *   **API Keys:** All secrets should be stored in the `.env` file. This file should be secured and **never** committed to version control.
