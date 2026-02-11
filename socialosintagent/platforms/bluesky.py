@@ -1,118 +1,55 @@
 import logging
-from typing import Any, Dict, List, Optional, cast
-from urllib.parse import quote_plus
-
+from typing import Any, List, Optional, Tuple
 from atproto import Client
-from atproto import exceptions as atproto_exceptions
-
-from ..cache import MAX_CACHE_ITEMS, CacheManager
-from ..exceptions import UserNotFoundError
-from ..utils import (NormalizedMedia, NormalizedPost, NormalizedProfile,
-                     UserData, download_media, extract_and_resolve_urls,
-                     get_sort_key)
+from .base_fetcher import BaseFetcher
+from ..utils import (NormalizedMedia, NormalizedPost, NormalizedProfile, download_media, get_sort_key)
 
 logger = logging.getLogger("SocialOSINTAgent.platforms.bluesky")
 
-DEFAULT_FETCH_LIMIT = 50
+class BlueskyFetcher(BaseFetcher):
+    def __init__(self):
+        super().__init__(platform_name="bluesky")
 
-def fetch_data(
-    client: Client,
-    username: str,
-    cache: CacheManager,
-    force_refresh: bool = False,
-    fetch_limit: int = DEFAULT_FETCH_LIMIT,
-) -> Optional[UserData]:
-    cached_data = cache.load("bluesky", username)
-    if cache.is_offline:
-        return cached_data
+    def _fetch_profile(self, username: str, **kwargs) -> Optional[NormalizedProfile]:
+        client = kwargs.get("client")
+        p = client.get_profile(actor=username)
+        return NormalizedProfile(
+            platform="bluesky", id=p.did, username=p.handle,
+            display_name=p.display_name, bio=p.description,
+            profile_url=f"https://bsky.app/profile/{p.handle}",
+            metrics={"followers": p.followers_count, "posts": p.posts_count, "did": p.did}
+        )
 
-    if not force_refresh and cached_data and len(cached_data.get("posts", [])) >= fetch_limit:
-        return cached_data
+    def _fetch_batch(self, username, profile, needed, state, **kwargs) -> Tuple[List[Any], Any]:
+        client = kwargs.get("client")
+        batch_limit = min(max(needed, 20), 100)
+        resp = client.get_author_feed(actor=username, cursor=state, limit=batch_limit)
+        return (resp.feed or []), resp.cursor
 
-    logger.info(f"Fetching Bluesky data for {username} (Limit: {fetch_limit})")
-
-    try:
-        profile_obj = cached_data.get("profile") if not force_refresh and cached_data else None
-
-        if not profile_obj:
-            profile = client.get_profile(actor=username)
-            profile_obj = NormalizedProfile(
-                platform="bluesky",
-                id=profile.did,
-                username=profile.handle,
-                display_name=profile.display_name,
-                bio=profile.description,
-                created_at=None,
-                profile_url=f"https://bsky.app/profile/{profile.handle}",
-                metrics={"followers": profile.followers_count, "following": profile.follows_count, "post_count": profile.posts_count}
-            )
+    def _normalize(self, item: Any, profile: NormalizedProfile, **kwargs) -> NormalizedPost:
+        post = item.post
+        client, cache, allow_ext = kwargs.get("client"), kwargs.get("cache"), kwargs.get("allow_external_media", False)
+        media = []
         
-        all_posts: List[NormalizedPost] = cached_data.get("posts", []) if not force_refresh and cached_data else []
-        processed_post_ids = {p['id'] for p in all_posts}
-        
-        needed_count = fetch_limit - len(all_posts)
+        if hasattr(post, 'embed') and post.embed:
+            images = []
+            if hasattr(post.embed, 'images'): images = post.embed.images
+            elif hasattr(post.embed, 'media') and hasattr(post.embed.media, 'images'): images = post.embed.media.images
+            
+            auth = {"access_jwt": getattr(client._session, 'access_jwt', None)}
+            for img in images:
+                url = getattr(img, 'thumb', f"https://cdn.bsky.app/img/feed_fullsize/plain/{post.author.did}/{getattr(img, 'cid', '')}")
+                if p := download_media(cache.base_dir, url, cache.is_offline, "bluesky", auth, allow_ext):
+                    media.append(NormalizedMedia(url=url, local_path=str(p), type="image"))
 
-        if force_refresh or needed_count > 0:
-            cursor = None
-            while len(all_posts) < fetch_limit:
-                response = client.get_author_feed(actor=username, cursor=cursor, limit=min(fetch_limit, 100))
-                if not response or not response.feed:
-                    break
+        return NormalizedPost(
+            platform="bluesky", id=post.uri, author_username=profile["username"],
+            text=getattr(post.record, "text", ""), media=media,
+            created_at=get_sort_key({"ts": getattr(post.record, "created_at", None)}, "ts"),
+            post_url=f"https://bsky.app/profile/{post.author.handle}/post/{post.uri.split('/')[-1]}",
+            metrics={"likes": post.like_count, "replies": post.reply_count},
+            type="reply" if hasattr(post.record, 'reply') and post.record.reply else "post"
+        )
 
-                new_posts_found = 0
-                for feed_item in response.feed:
-                    post = feed_item.post
-                    if post.uri not in processed_post_ids:
-                        all_posts.append(_to_normalized_post(post, cache, client))
-                        processed_post_ids.add(post.uri)
-                        new_posts_found += 1
-
-                if new_posts_found == 0:
-                    break
-                cursor = response.cursor
-                if not cursor:
-                    break
-
-        final_posts = sorted(all_posts, key=lambda x: get_sort_key(x, "created_at"), reverse=True)[:max(fetch_limit, MAX_CACHE_ITEMS)]
-        user_data = UserData(profile=profile_obj, posts=final_posts)
-        cache.save("bluesky", username, user_data)
-        return user_data
-
-    except atproto_exceptions.AtProtocolError as e:
-        if "Profile not found" in str(e):
-            raise UserNotFoundError(f"Bluesky user {username} not found.") from e
-        raise RuntimeError(f"Bluesky API error for {username}: {e}") from e
-    except Exception as e:
-        logger.error(f"Unexpected error fetching Bluesky data for {username}: {e}", exc_info=True)
-        return None
-
-def _to_normalized_post(post: Any, cache: CacheManager, client: Client) -> NormalizedPost:
-    record = cast(Any, post.record)
-    media_items: List[NormalizedMedia] = []
-    
-    if embed := getattr(record, "embed", None):
-        images_to_process = []
-        if hasattr(embed, "images"): images_to_process.extend(embed.images)
-        if (record_media := getattr(embed, 'media', None)) and hasattr(record_media, 'images'):
-            images_to_process.extend(record_media.images)
-        
-        auth_details = {"access_jwt": getattr(client._session, 'access_jwt', None)}
-        for image_info in images_to_process:
-            if (img_blob := getattr(image_info, "image", None)) and (cid := getattr(img_blob, "cid", None)):
-                mime_type = getattr(img_blob, "mime_type", "image/jpeg").split('/')[-1]
-                cdn_url = f"https://cdn.bsky.app/img/feed_fullsize/plain/{post.author.did}/{quote_plus(str(cid))}@{mime_type}"
-                if path := download_media(cache.base_dir, cdn_url, cache.is_offline, "bluesky", auth_details):
-                    media_items.append(NormalizedMedia(url=cdn_url, local_path=str(path), type="image"))
-
-    return NormalizedPost(
-        platform="bluesky",
-        id=post.uri,
-        created_at=get_sort_key({"created_at": getattr(record, "created_at", None)}, "created_at"),
-        author_username=post.author.handle,
-        text=getattr(record, "text", ""),
-        media=media_items,
-        external_links=extract_and_resolve_urls(getattr(record, "text", "")),
-        post_url=f"https://bsky.app/profile/{post.author.handle}/post/{post.uri.split('/')[-1]}",
-        metrics={"likes": post.like_count, "reposts": post.repost_count, "replies": post.reply_count},
-        type="reply" if post.record.reply else "post"
-    )
+def fetch_data(**kwargs):
+    return BlueskyFetcher().fetch_data(kwargs.pop("username"), kwargs.pop("cache"), **kwargs)

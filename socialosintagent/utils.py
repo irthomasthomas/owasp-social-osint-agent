@@ -2,17 +2,38 @@ import hashlib
 import json
 import logging
 import re
+import os
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TypedDict
-
+from urllib.parse import urlparse
 import httpx
 import tweepy
 from openai import RateLimitError
 from rich.panel import Panel
 
 from .exceptions import RateLimitExceededError
+
+logger = logging.getLogger("SocialOSINTAgent.utils")
+
+SAFE_CDN_DOMAINS = {
+    "twitter": ["pbs.twimg.com", "video.twimg.com"],
+    "reddit": [
+        "i.redd.it", "preview.redd.it", "v.redd.it", "external-preview.redd.it", 
+        "www.redditstatic.com", "b.thumbs.redditmedia.com"
+        # Note: i.imgur.com is excluded by default for strictness, 
+        # but is generally considered a 'safe' CDN vs a private server.
+    ],
+    "bluesky": ["cdn.bsky.app", "cdn.bsky.social"],
+    "mastodon": ["mastodon.social", "files.mastodon.social"]
+}
+
+# Allow adding extra domains via .env (e.g., EXTRA_REDDIT_CDNS="i.imgur.com,custom.cdn.com")
+for platform in SAFE_CDN_DOMAINS.keys():
+    env_var = f"EXTRA_{platform.upper()}_CDNS"
+    if extra := os.getenv(env_var):
+        SAFE_CDN_DOMAINS[platform].extend([d.strip() for d in extra.split(",")])
 
 class NormalizedMedia(TypedDict, total=False):
     url: str
@@ -65,7 +86,6 @@ def get_sort_key(item: Dict[str, Any], dt_key: str) -> datetime:
     dt_val = item.get(dt_key)
     if isinstance(dt_val, str):
         try:
-            if dt_val.endswith("Z"): dt_val = dt_val[:-1] + "+00:00"
             dt_obj = datetime.fromisoformat(dt_val)
             return dt_obj if dt_obj.tzinfo else dt_obj.replace(tzinfo=timezone.utc)
         except ValueError:
@@ -125,10 +145,18 @@ def handle_rate_limit(console, platform_context: str, exception: Exception, shou
     if should_raise:
         raise RateLimitExceededError(error_message + f" ({reset_info})", original_exception=original_exc)
 
-def download_media(base_dir: Path, url: str, is_offline: bool, platform: str, auth_details: Optional[Dict[str, Any]] = None) -> Optional[Path]:
+def download_media(base_dir: Path, url: str, is_offline: bool, platform: str, auth_details: Optional[Dict[str, Any]] = None, allow_external: bool = False) -> Optional[Path]:
+    if not is_offline and not allow_external: # Validate Domain against Safe List
+        domain = urlparse(url).netloc.lower()
+        if platform in SAFE_CDN_DOMAINS:
+            if domain not in SAFE_CDN_DOMAINS[platform]:
+                logger.warning(f"Security: Blocked download from external domain '{domain}' for {platform}. Use --unsafe-allow-external-media to bypass.")
+                return None
+
     url_hash = hashlib.md5(url.encode()).hexdigest()
     media_dir = base_dir / "media"
-    
+    media_dir.mkdir(parents=True, exist_ok=True)
+  
     for ext in SUPPORTED_IMAGE_EXTENSIONS + [".mp4", ".webm"]:
         existing_path = media_dir / f"{url_hash}{ext}"
         if existing_path.exists():

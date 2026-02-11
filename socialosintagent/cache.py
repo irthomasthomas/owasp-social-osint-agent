@@ -42,9 +42,18 @@ class CacheManager:
 
         Returns:
             A Path object for the cache file.
+            
+        Raises:
+            ValueError: If username becomes empty after sanitization.
         """
         # Sanitize username to create a safe filename
-        safe_username = "".join(c for c in username if c.isalnum() or c in ["-", "_", ".", "@"])[:100]
+        # Only allow: alphanumeric, hyphen, underscore, @
+        # Explicitly EXCLUDE "." to prevent path traversal (e.g., "../../../etc/passwd")
+        safe_username = "".join(c for c in username if c.isalnum() or c in ["-", "_", "@"])[:100]
+        
+        if not safe_username:
+            raise ValueError(f"Username '{username}' is invalid after sanitization (became empty)")
+        
         return self.cache_dir / f"{platform}_{safe_username}.json"
 
     def load(self, platform: str, username: str) -> Optional[UserData]:
@@ -75,8 +84,22 @@ class CacheManager:
                 logger.warning(f"Cache file for {platform}/{username} is incomplete or in an old format. Discarding.")
                 cache_path.unlink(missing_ok=True)
                 return None
+            
+            # Fix top-level timestamp
+            if isinstance(data.get("timestamp"), str):
+                data["timestamp"] = get_sort_key(data, "timestamp")
 
-            timestamp = get_sort_key(data, "timestamp")
+            # Fix profile created_at
+            if "profile" in data and isinstance(data["profile"].get("created_at"), str):
+                data["profile"]["created_at"] = get_sort_key(data["profile"], "created_at")
+
+            # Fix all posts created_at
+            if "posts" in data:
+                for post in data["posts"]:
+                    if isinstance(post.get("created_at"), str):
+                        post["created_at"] = get_sort_key(post, "created_at")
+
+            timestamp = data["timestamp"]
             
             if self.is_offline:
                 logger.info(f"Offline mode: Using potentially stale cache for {platform}/{username}.")

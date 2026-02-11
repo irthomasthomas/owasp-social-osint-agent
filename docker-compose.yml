@@ -8,7 +8,7 @@ services:
     # This ensures cache, media, and reports persist outside the container.
     volumes:
       - ./data:/app/data
-      - ./logs:/app/analyzer.log
+      - ./logs:/app/logs
     # Load environment variables from the .env file
     env_file:
       - .env

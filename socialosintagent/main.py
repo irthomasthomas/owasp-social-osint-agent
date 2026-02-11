@@ -12,6 +12,7 @@ from socialosintagent.cli_handler import CliHandler
 from socialosintagent.client_manager import ClientManager
 from socialosintagent.llm import LLMAnalyzer
 
+logger = logging.getLogger("SocialOSINTAgent.main")
 
 def main():
     load_dotenv()
@@ -32,6 +33,7 @@ Environment Variables Required... (rest of epilog is unchanged)
     parser.add_argument("--no-auto-save", action="store_true", help="Disable automatic saving of reports.")
     parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], default="WARNING", help="Set the logging level.")
     parser.add_argument("--offline", action="store_true", help="Run in offline mode, using only cached data.")
+    parser.add_argument("--unsafe-allow-external-media", action="store_true", help="Security: Allow downloading media from domains outside known social media CDNs (e.g. personal servers).")
     args = parser.parse_args()
 
     log_level_numeric = getattr(logging, args.log_level.upper())
