@@ -695,7 +695,8 @@ class SocialOSINTAgent:
         safe_q = "".join(c for c in query[:30] if c.isalnum() or c in " _-").strip() or "query"
         safe_p = "_".join(sorted(platforms)) or "platforms"
         base_filename = f"analysis_{ts}_{safe_p}_{safe_q}"
-        path = self.base_dir / "outputs" / f"{base_filename}.{file_format}"
+        ext = "md" if file_format == "markdown" else file_format
+        path = self.base_dir / "outputs" / f"{base_filename}.{ext}"
 
         if file_format == "json":
             data_to_save = {
