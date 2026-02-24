@@ -168,10 +168,10 @@ def sanitize_ugc_content(content: str, source_description: str) -> Tuple[str, Li
     # XML escape
     sanitized = xml_escape(content)
     
-    # Optional: Apply line delimiting for high-risk content
-    # Uncomment if you want double defense
-    # if injections:
-    #     sanitized = delimit_lines(sanitized, prefix="UGC")
+    # Apply line delimiting as a second defense layer.
+    # Even if XML escaping fails, line-prefixing breaks injection syntax
+    # by preventing injected content from forming valid LLM instructions.
+    sanitized = delimit_lines(sanitized, prefix="UGC")
     
     return sanitized, warnings
 
@@ -344,7 +344,7 @@ class LLMAnalyzer:
                 output.append(f"- Account Created: {created_dt.strftime('%Y-%m-%d')}")
         
         if bio_sanitized:
-            output.append(f"- Bio: {bio_sanitized.strip()}")
+            output.append(f"- Bio: [UGC_START] {bio_sanitized.strip()} [UGC_END]")
         
         if metrics := profile.get("metrics"):
             metrics_str = ', '.join(f"{k.replace('_', ' ').capitalize()}={v}" for k, v in metrics.items())
@@ -369,7 +369,7 @@ class LLMAnalyzer:
                 if warnings:
                     self.security_warnings_accumulated.extend(warnings)
                 
-                output.append(f"- Item {i+1} ({ts}){info_str}:\n  Content: {text_sanitized}")
+                output.append(f"- Item {i+1} ({ts}){info_str}:\n  Content: [UGC_START] {text_sanitized} [UGC_END]")
 
         return "\n".join(output)
 
