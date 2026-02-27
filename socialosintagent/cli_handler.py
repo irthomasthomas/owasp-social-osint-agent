@@ -154,12 +154,31 @@ class CliHandler:
             prompt_msg += " - OFFLINE, cache only"
         return prompt_msg
 
+    def _build_prompt_label(self, platforms: Dict[str, List[str]]) -> str:
+        """
+        Builds the dynamic query prompt label showing all active targets.
+
+        Renders as e.g. '[twitter/target1, reddit/target2] Query' so the user
+        always knows exactly which targets are in scope without needing a
+        separate status panel.
+
+        Args:
+            platforms: The current platforms dict mapping platform -> [usernames].
+
+        Returns:
+            A Rich-markup string suitable for use as a Prompt.ask label.
+        """
+        targets = [f"{p}/{u}" for p, users in platforms.items() for u in users]
+        target_str = ", ".join(targets)
+        return f"\n[bold cyan][[/bold cyan][cyan]{target_str}[/cyan][bold cyan]][/bold cyan] [bold green]Query[/bold green]"
+
     def _run_analysis_loop(self, platforms: Dict[str, List[str]], fetch_options: Dict[str, Any]):
         """
         The main loop for an active analysis session.
-        Uses slash commands and persistent targeting info for clarity.
+        Uses slash commands and a dynamic prompt label showing active targets.
+        Supports /add and /remove to grow/shrink the target set mid-session.
         """
-        # Persistent Header Panel
+        # Persistent Header Panel — shown once at session start
         platform_info = " | ".join([f"{p.capitalize()}: {', '.join(u)}" for p, u in platforms.items()])
         self.console.print("\n")
         self.console.print(Panel(
@@ -175,12 +194,11 @@ class CliHandler:
         while True:
             try:
                 # Persistent Command Footer (shown before every prompt)
-                self.console.print("[dim italic]Commands: /exit, /help, /refresh, /loadmore <count>[/dim italic]")
-                
-                user_input = Prompt.ask(
-                    "\n[bold green]Agent Query[/bold green]", 
-                    default=last_query
-                ).strip()
+                self.console.print("[dim italic]Commands: /exit, /help, /refresh, /loadmore, /add, /remove, /status[/dim italic]")
+
+                # Dynamic prompt label — reflects current target list at all times
+                prompt_label = self._build_prompt_label(platforms)
+                user_input = Prompt.ask(prompt_label, default=last_query).strip()
 
                 if not user_input:
                     continue
@@ -197,6 +215,10 @@ class CliHandler:
 
                 elif input_lower in ["/help", "/?", "?"]:
                     self._show_help_table()
+                    continue
+
+                elif input_lower == "/status":
+                    self._handle_status_command(platforms)
                     continue
 
                 elif input_lower == "/refresh":
@@ -219,6 +241,16 @@ class CliHandler:
                     should_run_analysis, query_to_run, force_refresh = self._handle_loadmore_command(
                         parts, platforms, fetch_options, last_query
                     )
+
+                elif input_lower.startswith("/add"):
+                    # Handle adding a new target to the current session
+                    self._handle_add_command(user_input, platforms, fetch_options)
+                    continue
+
+                elif input_lower.startswith("/remove"):
+                    # Handle removing a target from the current session
+                    self._handle_remove_command(user_input, platforms, fetch_options)
+                    continue
 
                 # Standard Query (No Slash)
                 else:
@@ -248,14 +280,19 @@ class CliHandler:
                 continue
             except Exception as e:
                 logger.error(f"Error in analysis loop: {e}", exc_info=True)
-                self.console.print(f"[bold red]An error occurred: {e}[/bold red]")
+                from rich.markup import escape as _escape
+                self.console.print(f"[bold red]An error occurred:[/bold red] {_escape(str(e))}")
 
     def _show_help_table(self):
         """Helper to display a clean command reference."""
         table = Table(title="Command Reference", show_header=True, header_style="bold magenta", box=None)
         table.add_column("Command", style="cyan")
         table.add_column("Description", style="white")
-        
+
+        table.add_row("/add platform/user", "Add a new target to the session using the session default fetch count.")
+        table.add_row("/add platform/user/count", "Add a new target fetching a specific number of posts (e.g. /add twitter/elon/100).")
+        table.add_row("/remove platform/user", "Remove a target from the session (cannot remove the last remaining target).")
+        table.add_row("/status", "Show all active targets with post counts and cache freshness.")
         table.add_row("/loadmore <n>", "Fetch <n> additional items for current targets.")
         table.add_row("/loadmore <p/u> <n>", "Fetch more for a specific platform/user (e.g. /loadmore twitter/elon 20).")
         table.add_row("/refresh", "Ignore cache and force a fresh download from all APIs.")
@@ -263,6 +300,176 @@ class CliHandler:
         table.add_row("/exit", "Exit the session and return to the main menu.")
         
         self.console.print(Panel(table, border_style="magenta"))
+
+    def _handle_add_command(self, user_input: str, platforms: Dict[str, List[str]], fetch_options: Dict[str, Any]):
+        """
+        Handles the /add command to dynamically add a new target to the current session.
+
+        Syntax:
+            /add platform/user          — uses the session default_count
+            /add platform/user/count    — fetches a specific number of posts
+
+        The new target is fetched immediately (respecting the cache) so it is ready
+        for the next analysis query. If the target already exists in the session a
+        warning is printed and no action is taken.
+
+        Args:
+            user_input:    The raw command string entered by the user.
+            platforms:     The mutable platforms dict for the current session.
+            fetch_options: The mutable fetch options dict for the current session.
+        """
+        from .utils import sanitize_username
+
+        # Parse: /add platform/user  or  /add platform/user/count
+        parts = user_input.strip().split()
+        if len(parts) != 2:
+            self.console.print("[red]Invalid format. Use: /add platform/user  or  /add platform/user/count[/red]")
+            return
+
+        target_arg = parts[1]
+        segments = target_arg.split("/")
+
+        # Expect either 2 segments (platform/user) or 3 segments (platform/user/count)
+        if len(segments) == 3:
+            platform, username_raw, count_str = segments
+            try:
+                fetch_count = int(count_str)
+            except ValueError:
+                self.console.print(f"[red]Invalid count '{count_str}'. Use: /add platform/user/count[/red]")
+                return
+        elif len(segments) == 2:
+            platform, username_raw = segments
+            # Inherit the session default count
+            fetch_count = fetch_options.get("default_count", 50)
+        else:
+            self.console.print("[red]Invalid format. Use: /add platform/user  or  /add platform/user/count[/red]")
+            return
+
+        platform = platform.lower().strip()
+        username = sanitize_username(username_raw.strip())
+
+        if not username:
+            self.console.print("[red]Invalid username after sanitization.[/red]")
+            return
+
+        # Check the platform is available/configured
+        available = self.agent.client_manager.get_available_platforms(check_creds=True)
+        if platform not in available:
+            self.console.print(f"[red]Platform '{platform}' is not configured or unavailable. Available: {', '.join(available)}[/red]")
+            return
+
+        # Warn and do nothing if the target is already in the session
+        if username in platforms.get(platform, []):
+            self.console.print(f"[yellow]'{platform}/{username}' is already in this session.[/yellow]")
+            return
+
+        # Register the custom fetch count for this target if it differs from default
+        target_key = f"{platform}:{username}"
+        if fetch_count != fetch_options.get("default_count", 50):
+            if "targets" not in fetch_options:
+                fetch_options["targets"] = {}
+            fetch_options["targets"][target_key] = {"count": fetch_count}
+
+        # Add the user to the session — adding user to session
+        if platform not in platforms:
+            platforms[platform] = []
+        platforms[platform].append(username)
+
+        # Show cache info so the user knows what data is already available
+        cache_info = self._get_cache_info_string(platform, username)
+        self.console.print(
+            f"[green]Added {platform}/{username} to session[/green] "
+            f"(fetch count: {fetch_count}) {cache_info}"
+        )
+
+    def _handle_remove_command(self, user_input: str, platforms: Dict[str, List[str]], fetch_options: Dict[str, Any]):
+        """
+        Handles the /remove command to drop a target from the current session.
+
+        Syntax:
+            /remove platform/user
+
+        Refuses to remove the last remaining target across all platforms so the
+        session always has at least one active target. Also cleans up any
+        per-target fetch_options entries for the removed user.
+
+        Args:
+            user_input:    The raw command string entered by the user.
+            platforms:     The mutable platforms dict for the current session.
+            fetch_options: The mutable fetch options dict for the current session.
+        """
+        parts = user_input.strip().split()
+        if len(parts) != 2 or "/" not in parts[1]:
+            self.console.print("[red]Invalid format. Use: /remove platform/user[/red]")
+            return
+
+        platform, username_raw = parts[1].split("/", 1)
+        platform = platform.lower().strip()
+        username = username_raw.strip()
+
+        # Check the target is actually in the session
+        if platform not in platforms or username not in platforms.get(platform, []):
+            self.console.print(f"[red]'{platform}/{username}' is not in the current session.[/red]")
+            return
+
+        # Count total targets across all platforms — refuse if this is the last one
+        total_targets = sum(len(users) for users in platforms.values())
+        if total_targets <= 1:
+            self.console.print(
+                f"[yellow]Cannot remove '{platform}/{username}' — it is the last remaining target in this session.[/yellow]"
+            )
+            return
+
+        # Remove the user and clean up any empty platform bucket
+        platforms[platform].remove(username)
+        if not platforms[platform]:
+            del platforms[platform]
+
+        # Clean up any per-target fetch_options entry for the removed user
+        target_key = f"{platform}:{username}"
+        fetch_options.get("targets", {}).pop(target_key, None)
+
+        self.console.print(f"[green]Removed {platform}/{username} from session.[/green]")
+
+    def _handle_status_command(self, platforms: Dict[str, List[str]]):
+        """
+        Handles the /status command to display a live summary of all session targets.
+
+        For each active target, shows:
+        - Platform and username
+        - Number of posts currently in cache
+        - Cache freshness (fresh / stale with age / no cache)
+
+        This gives the user an at-a-glance view of how much data is available
+        for each target before running a query.
+
+        Args:
+            platforms: The current platforms dict mapping platform -> [usernames].
+        """
+        table = Table(title="Session Status", show_header=True, header_style="bold cyan", show_lines=True)
+        table.add_column("Target", style="cyan")
+        table.add_column("Posts", style="blue", justify="right")
+        table.add_column("Cache", style="yellow")
+
+        for platform, usernames in platforms.items():
+            for username in usernames:
+                data = self.agent.cache.load(platform, username)
+                post_count = str(len(data.get("posts", []))) if data else "—"
+
+                if not data:
+                    cache_status = "[dim]no cache[/dim]"
+                else:
+                    cached_at = get_sort_key(data, "timestamp")
+                    age_delta = datetime.now(timezone.utc) - cached_at
+                    is_fresh = age_delta.total_seconds() < CACHE_EXPIRY_HOURS * 3600
+                    if is_fresh:
+                        cache_status = "[green]fresh[/green]"
+                    else:
+                        cache_status = f"[yellow]stale ({self._format_cache_age(cached_at.isoformat())})[/yellow]"
+
+                table.add_row(f"{platform}/{username}", post_count, cache_status)
+
+        self.console.print(Panel(table, border_style="cyan", expand=False))
 
     def _display_and_save_report(self, result_dict: Dict[str, Any]):
         """Renders the analysis report to the console and handles saving."""

@@ -48,6 +48,25 @@ INJECTION_PATTERNS = [
     r'end\s+of\s+(instructions|prompt|guidelines)',
 ]
 
+# Restricted pattern set — used for scanning LLM output only.
+# Excludes patterns that appear verbatim in our own prompt files as examples
+# (e.g. image_analysis.prompt and system_analysis.prompt both cite "You are now a...",
+# "debug mode", "developer mode", "admin mode" as examples of attack phrases).
+# Using the full INJECTION_PATTERNS set on LLM output causes false positives when
+# the model echoes or paraphrases its own security instructions back in the response.
+OUTPUT_INJECTION_PATTERNS = [
+    r'ignore\s+(all\s+)?(previous|prior)\s+instructions',
+    r'disregard\s+(your|the|all)',
+    r'new\s+instructions?:',
+    r'</(text_evidence|vision_evidence|network_evidence|user_query)>',  # Premature XML closing
+    r'system\s+prompt',
+    r'repeat\s+(your|the)\s+instructions',
+    r'what\s+(are|is)\s+your\s+(instructions|guidelines|rules)',
+    r'you\s+must\s+(now|immediately)',
+    r'end\s+of\s+(instructions|prompt|guidelines)',
+]
+
+
 def xml_escape(text: str) -> str:
     """
     Escape XML special characters to prevent tag injection.
@@ -61,9 +80,9 @@ def xml_escape(text: str) -> str:
     Returns:
         Escaped text safe for XML content
     """
-    if not text:
+    if text == "":
         return ""
-    
+
     return (text
             .replace('&', '&amp;')
             .replace('<', '&lt;')
@@ -87,9 +106,9 @@ def delimit_lines(text: str, prefix: str = "DATA") -> str:
     Returns:
         Line-delimited text
     """
-    if not text:
+    if text == "":
         return ""
-    
+
     return '\n'.join(f"{prefix}: {line}" for line in text.split('\n'))
 
 
@@ -119,6 +138,33 @@ def detect_injection_attempt(text: str) -> List[str]:
             if match:
                 detected.append(f"Pattern '{pattern}' matched: '{match.group()}'")
     
+    return detected
+
+
+def detect_output_injection_attempt(text: str) -> List[str]:
+    """
+    Detect potential prompt injection attempts in LLM output.
+
+    Uses OUTPUT_INJECTION_PATTERNS — a restricted subset of INJECTION_PATTERNS
+    that excludes phrases which appear verbatim in our own prompt files as
+    illustrative examples. This prevents false positives caused by the model
+    echoing its own security briefing language back in the response.
+
+    Args:
+        text: LLM output text to scan
+
+    Returns:
+        List of matched pattern descriptions, empty if none found
+    """
+    if not text:
+        return []
+
+    detected = []
+    for pattern in OUTPUT_INJECTION_PATTERNS:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            detected.append(f"Pattern '{pattern}' matched: '{match.group()}'")
+
     return detected
 
 
@@ -159,6 +205,8 @@ def sanitize_ugc_content(content: str, source_description: str) -> Tuple[str, Li
         Tuple of (sanitized_content, list_of_warnings)
     """
     warnings = []
+    if not content:
+        return "", []
     
     # Detect injection attempts
     if injections := detect_injection_attempt(content):
@@ -297,13 +345,15 @@ class LLMAnalyzer:
             )
             
             result = completion.choices[0].message.content.strip() if completion.choices and completion.choices[0].message.content else None
-            
-            # Check if the result itself contains injection attempts (the model might have been compromised)
+
+            # Check vision model output for injection using the restricted pattern set.
+            # We use detect_output_injection_attempt() rather than detect_injection_attempt()
+            # to avoid false positives from the model echoing its own prompt's example phrases.
             if result:
-                if injections := detect_injection_attempt(result):
+                if injections := detect_output_injection_attempt(result):
                     logger.warning(f"Vision model output contains suspicious patterns: {injections}")
                     self.security_warnings_accumulated.append(f"Vision model output flagged: {injections[0]}")
-            
+
             return result
             
         except APIError as e:
@@ -525,8 +575,10 @@ class LLMAnalyzer:
             
             result = completion.choices[0].message.content or ""
             
-            # Check the output for injection patterns (paranoid mode)
-            if injections := detect_injection_attempt(result):
+            # Check the output for injection patterns using the restricted set.
+            # We use detect_output_injection_attempt() rather than detect_injection_attempt()
+            # to avoid false positives from the model echoing its own prompt's example phrases.
+            if injections := detect_output_injection_attempt(result):
                 logger.warning(f"LLM output contains suspicious patterns: {injections}")
                 # Don't block, but append a warning to the report
                 result += f"\n\n---\n\n**Security Notice:** The analysis output contained patterns that may indicate prompt injection attempts: {injections[0]}"

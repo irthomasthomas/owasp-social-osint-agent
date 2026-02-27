@@ -82,7 +82,7 @@ class DateTimeEncoder(json.JSONEncoder):
             return obj.isoformat()
         return super().default(obj)
 
-def get_sort_key(item: Dict[str, Any], dt_key: str) -> datetime:
+def get_sort_key(item: Any, dt_key: str) -> datetime:
     dt_val = item.get(dt_key)
     if isinstance(dt_val, str):
         try:
