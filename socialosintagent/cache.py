@@ -3,7 +3,6 @@
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -28,13 +27,18 @@ class CacheManager:
         self.is_offline = is_offline
         self.cache_dir = self.base_dir / "cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        # Instance-level path cache replaces @lru_cache, which leaks memory on
+        # instance methods by holding a strong reference to `self` indefinitely,
+        # preventing garbage collection of CacheManager instances.
+        self._path_cache: dict = {}
 
-    @lru_cache(maxsize=128)
     def get_cache_path(self, platform: str, username: str) -> Path:
         """
         Generates a standardized, safe file path for a given platform and username.
         
-        Uses lru_cache for performance to avoid repeated path constructions.
+        Results are memoized in an instance-level dict for performance, avoiding
+        repeated path constructions without the memory-leak risk of @lru_cache
+        on instance methods.
 
         Args:
             platform: The name of the social media platform.
@@ -46,6 +50,10 @@ class CacheManager:
         Raises:
             ValueError: If username becomes empty after sanitization.
         """
+        key = (platform, username)
+        if key in self._path_cache:
+            return self._path_cache[key]
+
         # Sanitize username to create a safe filename
         # Only allow: alphanumeric, hyphen, underscore, @
         # Explicitly EXCLUDE "." to prevent path traversal (e.g., "../../../etc/passwd")
@@ -54,7 +62,9 @@ class CacheManager:
         if not safe_username:
             raise ValueError(f"Username '{username}' is invalid after sanitization (became empty)")
         
-        return self.cache_dir / f"{platform}_{safe_username}.json"
+        path = self.cache_dir / f"{platform}_{safe_username}.json"
+        self._path_cache[key] = path
+        return path
 
     def load(self, platform: str, username: str) -> Optional[UserData]:
         """

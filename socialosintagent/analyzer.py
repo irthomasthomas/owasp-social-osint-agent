@@ -486,6 +486,45 @@ class SocialOSINTAgent:
         
         return {"metadata": metadata, "report": header + report, "error": False}
 
+    def get_contacts(
+        self,
+        platforms: Dict[str, List[str]],
+    ):
+        """
+        Extract discovered network contacts from cached post data.
+
+        Runs deterministic extraction (mentions, retweets, repo interactions)
+        over the cached posts for every active target. Does not make any
+        API calls — operates entirely on locally-cached data.
+
+        Results are sorted by weight (most-interacted-with contacts first).
+        Active targets are automatically excluded from the returned list so
+        the UI doesn't suggest promoting someone who is already being tracked.
+
+        Args:
+            platforms: The session's active targets dict
+                       (platform -> [usernames]).
+
+        Returns:
+            List of DiscoveredContact sorted by weight descending.
+        """
+        from .network_extractor import extract_contacts
+
+        # Build the posts dict that extract_contacts expects:
+        # platform -> username -> [NormalizedPost]
+        platform_posts: Dict[str, Dict] = {}
+        for platform, usernames in platforms.items():
+            platform_posts[platform] = {}
+            for username in usernames:
+                data = self.cache.load(platform, username)
+                if data:
+                    platform_posts[platform][username] = data.get("posts", [])
+
+        return extract_contacts(
+            platform_posts=platform_posts,
+            active_targets=platforms,
+        )
+
     def process_stdin(self):
         """Processes an analysis request provided via stdin as a JSON object."""
         stderr_console = Console(stderr=True)

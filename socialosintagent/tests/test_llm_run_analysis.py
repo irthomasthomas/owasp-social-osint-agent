@@ -136,13 +136,19 @@ class TestRunAnalysisPromptConstruction:
         assert "</user_query>" in user_content
 
     def test_text_evidence_wrapped_in_xml_tag(self, online_analyzer, clean_platforms_data):
-        """Collected text data must be wrapped in <text_evidence>...</text_evidence>."""
+        """Collected text data must be wrapped in <evidence>...</evidence>.
+
+        The tag was renamed from <text_evidence> to <evidence> when the
+        architecture moved to post-bound inline image analysis. Vision evidence
+        is now inline within each post's evidence unit rather than in a separate
+        block, so a single <evidence> wrapper covers both text and image data.
+        """
         captured = _stub_client(online_analyzer)
         online_analyzer.run_analysis(clean_platforms_data, "summarise")
 
         user_content = next(m["content"] for m in captured if m["role"] == "user")
-        assert "<text_evidence>" in user_content
-        assert "</text_evidence>" in user_content
+        assert "<evidence>" in user_content
+        assert "</evidence>" in user_content
 
     def test_security_warnings_accumulated_on_injected_data(
         self, online_analyzer, injected_platforms_data

@@ -225,15 +225,17 @@ class CliHandler:
                     if self.args.offline:
                         self.console.print("[yellow]'/refresh' is unavailable in offline mode.[/yellow]")
                         continue
-                    
+
                     if Confirm.ask("[yellow]Force refresh data for all targets? (Uses API calls)[/yellow]", default=False):
-                        force_refresh = True
                         query_to_run = Prompt.ask("Enter query to run with refreshed data", default=last_query).strip()
                         if query_to_run:
+                            # Both flags must be set here — the analysis block below handles execution
+                            force_refresh = True
                             should_run_analysis = True
                         else:
-                            self.console.print("[cyan]Refresh cancelled.[/cyan]")
-                    continue
+                            self.console.print("[cyan]Refresh cancelled (no query entered).[/cyan]")
+                    # Fall through to the analysis block if should_run_analysis is True,
+                    # otherwise the loop continues naturally on the next iteration.
 
                 elif input_lower.startswith("/loadmore"):
                     # Use existing parser but strip the slash first
@@ -441,7 +443,9 @@ class CliHandler:
         - Cache freshness (fresh / stale with age / no cache)
 
         This gives the user an at-a-glance view of how much data is available
-        for each target before running a query.
+        for each target before running a query. Note: reads the cache file
+        directly so it accurately reports stale entries rather than showing
+        "no cache" for expired-but-present files.
 
         Args:
             platforms: The current platforms dict mapping platform -> [usernames].
@@ -453,19 +457,27 @@ class CliHandler:
 
         for platform, usernames in platforms.items():
             for username in usernames:
-                data = self.agent.cache.load(platform, username)
-                post_count = str(len(data.get("posts", []))) if data else "—"
+                # Load directly from the cache file bypassing expiry, so /status
+                # accurately reports stale entries rather than showing "no cache".
+                cache_path = self.agent.cache.get_cache_path(platform, username)
+                data = None
+                post_count = "—"
+                cache_status = "[dim]no cache[/dim]"
 
-                if not data:
-                    cache_status = "[dim]no cache[/dim]"
-                else:
-                    cached_at = get_sort_key(data, "timestamp")
-                    age_delta = datetime.now(timezone.utc) - cached_at
-                    is_fresh = age_delta.total_seconds() < CACHE_EXPIRY_HOURS * 3600
-                    if is_fresh:
-                        cache_status = "[green]fresh[/green]"
-                    else:
-                        cache_status = f"[yellow]stale ({self._format_cache_age(cached_at.isoformat())})[/yellow]"
+                if cache_path.exists():
+                    import json as _json
+                    try:
+                        data = _json.loads(cache_path.read_text(encoding="utf-8"))
+                        post_count = str(len(data.get("posts", [])))
+                        cached_at = get_sort_key(data, "timestamp")
+                        age_delta = datetime.now(timezone.utc) - cached_at
+                        is_fresh = age_delta.total_seconds() < CACHE_EXPIRY_HOURS * 3600
+                        if is_fresh:
+                            cache_status = "[green]fresh[/green]"
+                        else:
+                            cache_status = f"[yellow]stale ({self._format_cache_age(cached_at.isoformat())})[/yellow]"
+                    except Exception:
+                        cache_status = "[red]unreadable[/red]"
 
                 table.add_row(f"{platform}/{username}", post_count, cache_status)
 
@@ -616,7 +628,7 @@ class CliHandler:
             return False, "", False
 
         target_key = f"{platform}:{username}"
-                # Ensure the path exists
+        # Ensure the path exists
         if "targets" not in fetch_options:
             fetch_options["targets"] = {}
 

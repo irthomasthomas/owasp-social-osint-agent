@@ -1,17 +1,88 @@
+# docker-compose.yml
+#
+# Two services:
+#
+#   web    — FastAPI web server (the main service).
+#             docker compose up -d web
+#             Serves the frontend at http://localhost:8000
+#             and the REST API at http://localhost:8000/api/v1/
+#
+#   agent  — Original CLI agent, for interactive/one-shot use.
+#             docker compose run --rm -it agent
+#
+# The two images are built independently — web no longer depends on the
+# agent image, so `docker compose up -d web` builds and starts without
+# any pre-build step.
+#
+# Both services mount ./data as a shared volume so they use the same
+# platform data cache, downloaded media, and outputs directory.
+#
+# Authentication:
+#   The web service binds to 127.0.0.1:8000 (localhost only).
+#   For remote access use an SSH tunnel:
+#     ssh -L 8000:localhost:8000 user@your-server
+#   Set OSINT_WEB_USER and OSINT_WEB_PASSWORD in .env to enable Basic Auth.
+#
+# Required environment variables (in .env):
+#   LLM_API_KEY, LLM_API_BASE_URL, ANALYSIS_MODEL, IMAGE_ANALYSIS_MODEL
+#
+# Optional platform credentials (in .env):
+#   TWITTER_BEARER_TOKEN, REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET,
+#   GITHUB_TOKEN, BLUESKY_USERNAME, BLUESKY_APP_PASSWORD
+#
+# Optional web auth (in .env):
+#   OSINT_WEB_USER, OSINT_WEB_PASSWORD
+
 services:
-  social-osint-agent:
-    # Build the image from the Dockerfile in the current directory
-    build: .
-    # Name the image for easier management
-    image: social-osint-agent:latest
-    # Mount the local 'data' directory into the container at /app/data
-    # This ensures cache, media, and reports persist outside the container.
+
+  # ── Web server ─────────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web    # Self-contained — builds from python:3.11-slim directly
+    image: osint-agent-web:latest
+    volumes:
+      - ./data:/app/data            # Shared with CLI: cache, media, outputs
+      - ./.env:/app/.env:ro
+      # Frontend is baked into the image. Uncomment for live frontend edits:
+      # - ./static:/app/static:ro
+    env_file: .env
+    working_dir: /app
+    ports:
+      - "127.0.0.1:8000:8000"       # Localhost only. Use SSH tunnel for remote access.
+    command: [
+      "uvicorn", "socialosintagent.web_server:app",
+      "--host", "0.0.0.0",
+      "--port", "8000",
+      "--log-level", "info",
+      "--reload"
+    ]
+    restart: unless-stopped
+    healthcheck:
+      # Use Python stdlib — curl is not guaranteed in the slim base image.
+      test: [
+        "CMD", "python", "-c",
+        "import urllib.request, sys; urllib.request.urlopen('http://localhost:8000/api/v1/platforms', timeout=5) or sys.exit(1)"
+      ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── CLI agent ──────────────────────────────────────────────────────────
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile        # The original base Dockerfile (unchanged)
+    image: osint-agent:latest
     volumes:
       - ./data:/app/data
-      - ./logs:/app/logs
-    # Load environment variables from the .env file
-    env_file:
-      - .env
-    # Required for the interactive CLI prompt to work correctly
-    tty: true
+      - ./.env:/app/.env:ro
+    env_file: .env
+    working_dir: /app
     stdin_open: true
+    tty: true
+    command: ["python", "-m", "socialosintagent"]
+    profiles:
+      - cli                         # Excluded from `docker compose up` by default.
+                                    # Use: docker compose --profile cli run --rm -it agent
