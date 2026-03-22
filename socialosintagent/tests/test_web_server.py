@@ -77,11 +77,8 @@ def web_client(tmp_path, monkeypatch):
         return real_cache_manager, mock_llm, mock_clients, real_session_manager
 
     monkeypatch.setattr("socialosintagent.web_server._get_components", fake_get_components)
-    # Ensure _JOBS is empty for each test.
-    # Must clear in-place — replacing the object would break references held
-    # inside _run_analysis_job, causing a KeyError on the new empty dict.
-    import socialosintagent.web_server as ws
-    ws._JOBS.clear()
+    # Ensure _JOBS is empty for each test
+    monkeypatch.setattr("socialosintagent.web_server._JOBS", {})
 
     from socialosintagent.web_server import app
     return TestClient(app, raise_server_exceptions=True), real_session_manager, tmp_path
@@ -245,13 +242,8 @@ class TestUpdateTargets:
 # ── Analysis job endpoints ────────────────────────────────────────────────────
 
 class TestStartAnalysis:
-    def test_returns_202_with_job_id_for_valid_session(self, web_client, monkeypatch):
+    def test_returns_202_with_job_id_for_valid_session(self, web_client):
         client, sm, _ = web_client
-        # Prevent the background job from running: it would call mock_llm and
-        # try to JSON-serialize a MagicMock return value into the session, and
-        # could also hit a KeyError if it references _JOBS before the endpoint
-        # has finished populating the entry.
-        monkeypatch.setattr("socialosintagent.web_server._run_analysis_job", MagicMock())
         s = sm.create("Analysis Test", {"hackernews": ["pg"]})
         resp = client.post(f"/api/v1/sessions/{s.session_id}/analyse",
                            json={"query": "What are their interests?"})
