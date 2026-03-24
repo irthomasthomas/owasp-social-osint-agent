@@ -429,8 +429,8 @@ class SocialOSINTAgent:
                 for platform, username, data in fetch_result.successful:
                     collected_data[platform].append({"username_key": username, "data": data})
                 
-                # Run analysis
-                report = self.llm.run_analysis(collected_data, query)
+                # Run analysis - Unpack the tuple
+                report, entities = self.llm.run_analysis(collected_data, query)
                 
             except RateLimitExceededError as e:
                 handle_rate_limit(console, "LLM Analysis", e)
@@ -484,7 +484,8 @@ class SocialOSINTAgent:
         
         header += "\n---\n\n"
         
-        return {"metadata": metadata, "report": header + report, "error": False}
+        # Return entities explicitly
+        return {"metadata": metadata, "report": header + report, "entities": entities, "error": False}
 
     def get_contacts(
         self,

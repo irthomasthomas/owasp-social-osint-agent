@@ -8,13 +8,9 @@
 #             and the REST API at http://localhost:8000/api/v1/
 #
 #   agent  — Original CLI agent, for interactive/one-shot use.
-#             docker compose run --rm -it agent
+#             docker compose --profile cli run --rm -it agent
 #
-# The two images are built independently — web no longer depends on the
-# agent image, so `docker compose up -d web` builds and starts without
-# any pre-build step.
-#
-# Both services mount ./data as a shared volume so they use the same
+# Both services share ./data as a volume so they use the same
 # platform data cache, downloaded media, and outputs directory.
 #
 # Authentication:
@@ -28,7 +24,7 @@
 #
 # Optional platform credentials (in .env):
 #   TWITTER_BEARER_TOKEN, REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET,
-#   GITHUB_TOKEN, BLUESKY_USERNAME, BLUESKY_APP_PASSWORD
+#   GITHUB_TOKEN, BLUESKY_IDENTIFIER, BLUESKY_APP_SECRET
 #
 # Optional web auth (in .env):
 #   OSINT_WEB_USER, OSINT_WEB_PASSWORD
@@ -39,27 +35,16 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile.web    # Self-contained — builds from python:3.11-slim directly
+      dockerfile: Dockerfile.web
     image: osint-agent-web:latest
     volumes:
       - ./data:/app/data            # Shared with CLI: cache, media, outputs
-      - ./.env:/app/.env:ro
-      # Frontend is baked into the image. Uncomment for live frontend edits:
-      # - ./static:/app/static:ro
     env_file: .env
     working_dir: /app
     ports:
       - "127.0.0.1:8000:8000"       # Localhost only. Use SSH tunnel for remote access.
-    command: [
-      "uvicorn", "socialosintagent.web_server:app",
-      "--host", "0.0.0.0",
-      "--port", "8000",
-      "--log-level", "info",
-      "--reload"
-    ]
     restart: unless-stopped
     healthcheck:
-      # Use Python stdlib — curl is not guaranteed in the slim base image.
       test: [
         "CMD", "python", "-c",
         "import urllib.request, sys; urllib.request.urlopen('http://localhost:8000/api/v1/platforms', timeout=5) or sys.exit(1)"
@@ -73,16 +58,14 @@ services:
   agent:
     build:
       context: .
-      dockerfile: Dockerfile        # The original base Dockerfile (unchanged)
+      dockerfile: Dockerfile.agent
     image: osint-agent:latest
     volumes:
       - ./data:/app/data
-      - ./.env:/app/.env:ro
     env_file: .env
     working_dir: /app
     stdin_open: true
     tty: true
-    command: ["python", "-m", "socialosintagent"]
+    # NOTE: `command:` has been removed. Dockerfile.agent uses ENTRYPOINT now.
     profiles:
       - cli                         # Excluded from `docker compose up` by default.
-                                    # Use: docker compose --profile cli run --rm -it agent

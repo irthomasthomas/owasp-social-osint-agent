@@ -1,0 +1,35 @@
+# Dockerfile.agent
+#
+# CLI-only image. No web server or frontend assets included.
+#
+# Usage:
+#   docker build -t osint-agent -f Dockerfile.agent .
+#   docker run --rm -it -v ./data:/app/data osint-agent
+#   docker run --rm -it -v ./data:/app/data osint-agent --offline
+#   docker compose --profile cli run --rm -T agent --stdin < query.json
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# System packages needed by Python deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install ONLY core agent dependencies
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy ONLY the agent package
+COPY socialosintagent/ ./socialosintagent/
+
+# Run as non-root user
+RUN useradd -m appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Use ENTRYPOINT so --stdin, --offline, etc., append properly
+ENTRYPOINT ["python", "-m", "socialosintagent.main"]

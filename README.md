@@ -1,10 +1,17 @@
-
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/bm-github/owasp-social-osint-agent)](https://github.com/bm-github/owasp-social-osint-agent/releases/latest)
 # 🕵️ owasp-social-osint-agent
 
 **OWASP Social OSINT Agent** is an intelligent, autonomous agent designed for open-source intelligence (OSINT) investigations. It leverages both text and vision-capable Large Language Models (LLMs) via any OpenAI-compatible API to autonomously gather, analyze, and synthesize user activity across single or multiple social media platforms. The final output is a structured analytical report that turns scattered public data into coherent, actionable intelligence.
 
+The agent can be driven through a **web interface** (recommended) or a **command-line interface**, both backed by the same engine and sharing the same data cache.
+
 ## 🌟 Key Features
+
+✅ **Web Interface:** A browser-based UI at `http://localhost:8000` for managing sessions, running queries, and reviewing reports — no terminal required.
+
+✅ **Session Management:** Save and revisit named investigation sessions, each with their own target list, query history, and full report archive.
+
+✅ **Network Contact Discovery:** Automatically extracts and surfaces accounts your targets interact with (mentions, retweets, repo interactions) so you can expand an investigation without manual trawling.
 
 ✅ **Multi-Platform Data Collection:** Aggregates data from Twitter/X, Reddit, Bluesky, GitHub, Hacker News, and Mastodon. Captures immutable identifiers (e.g., Bluesky DIDs) to ensure targets can be tracked even if they change their handles.
 
@@ -40,7 +47,7 @@
 
 ✅ **Robust Caching System:** Caches fetched text data for 24 hours (`data/cache/`) and media files (`data/media/`) to reduce API calls and speed up subsequent analyses. Vision analysis results are also cached.
 
-✅ **Cache Management:** Interactive commands (`cache status`, `purge data`) to display a summary of all cached data or to purge specific types of data.
+✅ **Cache Management:** View a summary of all cached data or purge specific types from the web UI or interactive CLI commands.
 
 ✅ **Interactive CLI & Docker Support:** User-friendly command-line interface with rich formatting that runs both locally and within a fully containerized Docker environment.
 
@@ -219,20 +226,15 @@ BLUESKY_APP_SECRET="xxxx-xxxx-xxxx-xxxx"
 # GitHub
 GITHUB_TOKEN="your_github_personal_access_token"
 # Mastodon Multi-Instance Support
-# Configure credentials for each Mastodon instance you want to access
-# The DEFAULT instance is used as a fallback when looking up users from unconfigured instances
-# Recommendation: Set a large, well-federated instance (like mastodon.social) as default
-
 MASTODON_INSTANCE_1_URL="https://mastodon.social"
 MASTODON_INSTANCE_1_TOKEN="YOUR_ACCESS_TOKEN_FOR_MASTODON_SOCIAL"
-MASTODON_INSTANCE_1_DEFAULT="true"  # Use this instance for cross-instance lookups
+MASTODON_INSTANCE_1_DEFAULT="true"
 
-# Add more instances as needed (increment the number)
-# MASTODON_INSTANCE_2_URL="https://infosec.exchange"
-# MASTODON_INSTANCE_2_TOKEN="YOUR_ACCESS_TOKEN_FOR_INFOSEC_EXCHANGE"
-
-# MASTODON_INSTANCE_3_URL="https://fosstodon.org"
-# MASTODON_INSTANCE_3_TOKEN="YOUR_ACCESS_TOKEN_FOR_FOSSTODON"
+# --- Optional: Web Interface Authentication ---
+# If set, the web UI will require HTTP Basic Auth.
+# Recommended whenever the server is accessible beyond localhost.
+OSINT_WEB_USER="your_username"
+OSINT_WEB_PASSWORD="your_password"
 
 # Security: Media Download Restrictions
 # By default, only trusted CDNs are allowed. Override with additional domains:
@@ -245,73 +247,155 @@ MASTODON_INSTANCE_1_DEFAULT="true"  # Use this instance for cross-instance looku
 
 ## 🚀 Usage
 
-There are two ways to run the agent: via Docker (recommended) or locally in a Python environment.
+There are three ways to run the agent: the **web interface**, the **interactive CLI**, or **programmatic/stdin mode**.
 
-### Recommended: Docker Mode
-This is the most stable and reproducible way to run the agent. It ensures all dependencies are handled correctly.
+### Recommended: Web Interface
 
-1.  **Build the Docker image:**
+The web interface provides a full browser-based UI for managing investigation sessions, running queries, and reviewing past reports.
+
+1. **Start the web server:**
     ```bash
-    docker-compose build
+    docker compose up -d web
     ```
-2.  **Run in Interactive Mode:**
-    This starts the interactive command-line interface.
+    This builds the image automatically on first run — no separate build step needed.
+
+2. **Open the interface:**
+    Navigate to `http://localhost:8000` in your browser.
+
+3. **Remote access:**
+    The server binds to `127.0.0.1` (localhost only) by default. To access it from another machine, use an SSH tunnel:
     ```bash
-    docker-compose run --rm social-osint-agent
+    ssh -L 8000:localhost:8000 user@your-server
     ```
-3.  **Run in Programmatic Mode (via Stdin):**
-    Pipe a JSON object to the agent for automated workflows.
-    ```bash
-    echo '{
-      "platforms": { "hackernews": ["pg"], "github": ["torvalds"] },
-      "query": "What are the primary technical interests and contributions of these users?"
-    }' | docker-compose run --rm -T social-osint-agent --stdin
-    ```
+    Then open `http://localhost:8000` locally.
+
+4. **Authentication:**
+    Set `OSINT_WEB_USER` and `OSINT_WEB_PASSWORD` in your `.env` file to enable HTTP Basic Auth. If these are not set, the server runs open — only appropriate for localhost use.
+
+#### Web Interface Features
+
+- **Sessions** — Create named investigation sessions, each with their own target list and query history. Sessions persist across server restarts.
+- **Target management** — Add or remove platforms/usernames from a session at any time using the target chip bar or the Manage Targets dialog.
+- **Live progress** — Analysis progress streams to the browser in real time via Server-Sent Events as data is fetched, images are analysed, and the report is synthesised.
+- **Query history** — Every query and its full report is saved to the session. Switch between past results from the history sidebar.
+- **Network contacts** — Discovered accounts your targets interact with are surfaced automatically, with dismiss support to manage the list.
+- **Cache status** — View freshness and post counts for all cached targets, and purge data by type (cache / media / outputs / all).
+
+### Docker CLI (Interactive)
+
+For terminal-based use, the `agent` service runs the original interactive CLI. It is excluded from `docker compose up` by default (uses the `cli` profile) so it never starts unintentionally alongside the web server.
+
+```bash
+docker compose --profile cli run --rm -it agent
+```
+
+### Docker CLI (Programmatic / Stdin)
+
+You can pipe a JSON file directly to the agent for automated workflows. *Note the use of the `-T` flag, which is required when piping data into a Docker container.*
+
+```bash
+docker compose --profile cli run --rm -T agent --stdin < input.json
+```
+
+*Example `input.json`:*
+```json
+{
+  "platforms": {
+    "twitter": ["twitterhandle"],
+    "github": ["torvalds"]
+  },
+  "query": "What are the primary technical interests and contributions of these users?",
+  "fetch_options": {
+    "default_count": 50
+  }
+}
+```
+
+*You can also pipe directly via `echo`:*
+```bash
+echo '{
+  "platforms": { "hackernews": ["pg"] },
+  "query": "Summary?"
+}' | docker compose --profile cli run --rm -T agent --stdin
+```
+
+### The Wrapper Script
+If typing `docker compose ...` gets tedious, create a small executable script in your project folder to make the Docker container feel exactly like a native Python CLI.
+
+Create a file named `osint` (no extension):
+```bash
+#!/bin/bash
+# If data is being piped in (like a file), use -T. Otherwise use -it for interactive.
+if [ -t 0 ]; then
+    docker compose --profile cli run --rm -it agent "$@"
+else
+    docker compose --profile cli run --rm -T agent "$@"
+fi
+```
+Make it executable:
+```bash
+chmod +x osint
+```
+Now you can run the tool beautifully:
+```bash
+./osint                             # Interactive menu
+./osint --offline                   # Interactive menu in offline mode
+./osint --stdin < query.json        # Automated JSON mode
+```
 
 ### Local Development Mode
-This is useful for development and debugging if you prefer not to use Docker.
 
-1.  **Create a Virtual Environment (Recommended):**
+Useful for development and debugging without Docker.
+
+1. **Create a virtual environment:**
     ```bash
     python -m venv .venv
-    source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     ```
-2.  **Install Dependencies:**
+2. **Install dependencies:**
     ```bash
+    pip install -r requirements.txt -r requirements-web.txt
+    # For running tests, also install:
     pip install -r requirements-dev.txt
     ```
-3.  **Run the Agent:**
-    (Ensure your `.env` file is in the project root)
+3. **Run the web server:**
+    ```bash
+    uvicorn socialosintagent.web_server:app --host 127.0.0.1 --port 8000 --reload
+    ```
+4. **Or run the CLI agent:**
     ```bash
     python -m socialosintagent.main
     ```
 
-### Command-line Arguments
+### Command-line Arguments (CLI only)
 *   `--stdin`: Read analysis configuration from standard input as a JSON object.
 *   `--format [json|markdown]`: Specifies the output format when saving results (default: `markdown`).
 *   `--no-auto-save`: Disable automatic saving of reports.
 *   `--log-level [DEBUG|INFO|WARNING|ERROR|CRITICAL]`: Set the logging level (default: `WARNING`).
 *   `--offline`: Run in offline mode. Uses only cached data.
-*   `--unsafe-allow-external-media`: **Security:** Allow downloading media from domains outside of known social media CDNs (e.g., personal servers or third-party websites).
+*   `--unsafe-allow-external-media`: **Security:** Allow downloading media from domains outside of known social media CDNs.
 
-### Special Commands (Interactive Mode)
+### Special Commands (Interactive CLI Mode)
 Within the analysis session, you can use these commands instead of an analysis query:
-*   `/loadmore [<platform/user>] <count>`: Fetch additional items for a target. If the target is unambiguous, you can omit `<platform/user>`.
+*   `/loadmore [<platform/user>] <count>`: Fetch additional items for a target.
 *   `/refresh`: Re-fetch data for all targets, ignoring the 24-hour cache.
+*   `/add <platform/user[/count]>`: Add a new target to the current session.
+*   `/remove <platform/user>`: Remove a target from the current session.
+*   `/status`: Show all active targets with post counts and cache freshness.
 *   `/help`: Displays available commands.
 *   `/exit`: Returns to the main platform selection menu.
-**Note:** Commands can be prefixed with `/` for clarity (e.g., `/help`, `/exit`), though the unprefixed versions still work for backward compatibility.
 
 ## ⚡ Cache System
 *   **Text/API Data:** Fetched platform data is cached for **24 hours** in `data/cache/` as JSON files.
 *   **Media Files:** Downloaded images and media are stored in `data/media/`.
 *   **Vision Analysis:** AI-generated image analyses are saved back into the corresponding user's cache file, preventing re-analysis of the same image.
-*   Use the `refresh` command in interactive mode to force a re-fetch of text data. Use "Purge Data" to clear media files.
+*   Both the web interface and CLI share the same `data/` directory, so cached data is always available to both.
+*   Use `/refresh` in the CLI or the "force refresh" toggle in the web UI to bypass the cache. Use "Purge All" in the web UI or "Purge Data" in the CLI to clear media files.
 
 ## 🤖 AI Analysis Details
 *   **Efficient Architecture:** The agent uses a two-phase process. It first rapidly collects all text data and downloads media from all specified targets. Only after this data gathering is complete does it begin the vision analysis phase.
 *   **Externalized Prompts:** All prompts used to guide the LLM are stored in the `socialosintagent/prompts/` directory, allowing for easy customization without changing code.
-*   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt, preventing the LLM from making temporal errors due to its fixed knowledge cutoff date.
+*   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt.
 *   **Data Synthesis:** The final analysis is performed by an LLM guided by a detailed system prompt. It synthesizes insights from the user's text, image analyses, and shared domain summary to build a comprehensive profile.
 
 ## 🛡️ Error Handling & Resilience
@@ -321,8 +405,10 @@ Within the analysis session, you can use these commands instead of an analysis q
 - **Partial Results**: You'll receive analysis based on whatever data was successfully collected, with clear indication of any failures
 
 ## 🔒 Security Considerations
-*   **API Keys:** All secrets should be stored in the `.env` file. This file should be secured and **never** committed to version control.
-*   **Data Caching:** Fetched data and downloaded media are stored locally in the `data/` directory. Be mindful of the sensitivity of the data being analyzed and secure the directory appropriately.
+*   **API Keys:** All secrets should be stored in the `.env` file and **never** committed to version control.
+*   **Web Authentication:** Set `OSINT_WEB_USER` and `OSINT_WEB_PASSWORD` to enable Basic Auth on the web interface. Without these, the server runs open — only suitable for localhost access via SSH tunnel.
+*   **Network Exposure:** The web server binds to `127.0.0.1` by default. Do not change this to `0.0.0.0` on a public server without also enabling authentication and placing it behind a reverse proxy with TLS.
+*   **Data Caching:** Fetched data and downloaded media are stored locally in `data/`. Secure this directory appropriately given the sensitivity of the subjects being investigated.
 *   **Terms of Service:** Ensure your use of the tool complies with the Terms of Service of each social media platform and your chosen LLM API provider.
 
 ## 🤝 Contributing

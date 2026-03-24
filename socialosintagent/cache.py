@@ -154,3 +154,12 @@ class CacheManager:
             logger.info(f"Saved cache for {platform}/{username} to {cache_path}")
         except Exception as e:
             logger.error(f"Failed to save cache for {platform}/{username}: {e}", exc_info=True)
+
+    def delete(self, platform: str, username: str):
+        """Deletes a specific user's cache file."""
+        path = self.get_cache_path(platform, username)
+        if path.exists():
+            path.unlink()
+            key = (platform, username)
+            if key in self._path_cache:
+                del self._path_cache[key]

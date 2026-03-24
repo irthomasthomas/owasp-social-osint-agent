@@ -36,7 +36,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 
@@ -62,6 +62,18 @@ from .network_extractor import extract_contacts as _extract_contacts
 from .session_manager import SessionManager
 
 load_dotenv()
+
+# Configure logging so web server logs are saved to file just like CLI
+logs_dir = Path("logs")
+logs_dir.mkdir(exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(logs_dir / "analyzer.log"),
+        logging.StreamHandler()
+    ]
+)
 
 logger = logging.getLogger("SocialOSINTAgent.WebServer")
 
@@ -284,9 +296,16 @@ def _run_analysis_job(
                 query=query,
                 report=result["report"],
                 metadata=result.get("metadata", {}),
+                entities=result.get("entities", {}),
             )
             session_manager.save(session)
             _JOBS[job_id]["query_id"] = query_id
+
+            # Automatically save the markdown report to the outputs directory
+            try:
+                agent._save_output_headless(result, args.format)
+            except Exception as e:
+                logger.error(f"Failed to save standalone markdown report: {e}")
 
         _JOBS[job_id]["status"] = "complete"
         _push_progress(job_id, "complete", {
@@ -627,9 +646,18 @@ def get_cache_status():
 )
 def purge_cache(body: PurgeRequest):
     """
-    Purges selected data directories. Targets: 'cache', 'media', 'outputs', 'all'.
-    Directories are recreated empty after purging.
+    Purges selected data directories or specific keys.
     """
+    cm, _, _, _ = _get_components()
+    if body.keys:
+        purged_keys = []
+        for key in body.keys:
+            if "_" in key:
+                platform, username = key.split("_", 1)
+                cm.delete(platform, username)
+                purged_keys.append(key)
+        return {"purged": purged_keys}
+
     targets = body.targets
     if "all" in targets:
         targets = ["cache", "media", "outputs"]
@@ -736,6 +764,103 @@ def undismiss_contact(session_id: str, body: DismissContactRequest):
     if not session:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
     return {"undismissed": f"{body.platform}/{body.username.lower()}"}
+
+
+# ---- OSINT Specific APIs (Export, Timeline, Media) ----
+
+@app.get(
+    "/api/v1/sessions/{session_id}/export",
+    summary="Export full session OSINT data",
+    dependencies=[Depends(_check_auth)],
+)
+def export_session(session_id: str):
+    """Exports session data including queries, entities, and contacts."""
+    cache_manager, _, _, session_manager = _get_components()
+    session = session_manager.load(session_id)
+    if not session: raise HTTPException(status_code=404)
+    
+    # Bundle contacts
+    platform_posts = {}
+    for platform, usernames in session.platforms.items():
+        platform_posts[platform] = {}
+        for user in usernames:
+            if data := cache_manager.load(platform, user):
+                platform_posts[platform][user] = data.get("posts", [])
+    contacts = [c.to_dict() for c in _extract_contacts(platform_posts, session.platforms)]
+    
+    export_data = session.to_dict()
+    export_data["extracted_network"] = contacts
+    
+    return JSONResponse(
+        content=export_data,
+        headers={"Content-Disposition": f'attachment; filename="osint_export_{session_id}.json"'}
+    )
+
+@app.get(
+    "/api/v1/sessions/{session_id}/timeline",
+    summary="Get timeline events for heatmap",
+    dependencies=[Depends(_check_auth)],
+)
+def get_timeline(session_id: str):
+    """Returns all post timestamps to generate a pattern-of-life heatmap."""
+    cache_manager, _, _, session_manager = _get_components()
+    session = session_manager.load(session_id)
+    if not session: raise HTTPException(status_code=404)
+    
+    events = []
+    for platform, usernames in session.platforms.items():
+        for user in usernames:
+            if data := cache_manager.load(platform, user):
+                for post in data.get("posts", []):
+                    ts = post.get("created_at")
+                    if ts:
+                        events.append({"timestamp": ts, "platform": platform, "author": user})
+    return {"events": events}
+
+@app.get(
+    "/api/v1/sessions/{session_id}/media",
+    summary="Get session media paths",
+    dependencies=[Depends(_check_auth)],
+)
+def get_media(session_id: str):
+    """Returns all downloaded media and their associated LLM analysis."""
+    cache_manager, _, _, session_manager = _get_components()
+    session = session_manager.load(session_id)
+    if not session: raise HTTPException(status_code=404)
+    
+    media_items = []
+    for platform, usernames in session.platforms.items():
+        for user in usernames:
+            if data := cache_manager.load(platform, user):
+                for post in data.get("posts", []):
+                    for m in post.get("media", []):
+                        # Ensure we only return successfully downloaded local images
+                        if m.get("local_path"):
+                            media_items.append({
+                                "url": m.get("url"),
+                                "path": m.get("local_path"),
+                                "analysis": m.get("analysis", ""),
+                                "post_id": post.get("id"),
+                                "platform": platform,
+                                "author": user
+                            })
+    return {"media": media_items}
+
+@app.get(
+    "/api/v1/sessions/{session_id}/media/file",
+    summary="Serve local media file",
+    dependencies=[Depends(_check_auth)],
+)
+def get_media_file(session_id: str, path: str):
+    """Serves the actual image bytes to the frontend."""
+    # Security: ensure the requested path is actually inside our media directory
+    requested_path = Path(path).resolve()
+    media_dir = (BASE_DIR / "media").resolve()
+    if media_dir not in requested_path.parents:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not requested_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(requested_path)
 
 
 # ---- Static files (frontend) ----

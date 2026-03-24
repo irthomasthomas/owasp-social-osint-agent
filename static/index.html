@@ -1,1031 +1,101 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="auto">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OSINT Agent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
-<!-- marked.js for markdown rendering -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="/css/styles.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
-<!-- SortableJS for drag-and-drop target cards -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
-
-<style>
-/* ─── Design tokens ─────────────────────────────────────────────────────── */
-:root {
-  --bg-0:        #0d0e0f;   /* deepest background                          */
-  --bg-1:        #141618;   /* card/panel background                       */
-  --bg-2:        #1c1f22;   /* raised surfaces                             */
-  --bg-3:        #252a2e;   /* hover states, borders                       */
-  --border:      #2e3439;
-  --border-hi:   #3d4449;
-
-  --amber:       #e8a838;   /* primary accent — warm, alert                */
-  --amber-dim:   #9c6f1e;
-  --amber-glow:  rgba(232,168,56,0.12);
-  --green:       #4ac97a;   /* success / fresh cache                       */
-  --green-dim:   #2a6b42;
-  --red:         #e85050;   /* error / stale                               */
-  --red-dim:     #7a2828;
-  --blue:        #4a9de8;   /* info / links                                */
-
-  --text-0:      #f0ede8;   /* primary text                                */
-  --text-1:      #b0aa9f;   /* secondary                                   */
-  --text-2:      #6a6560;   /* muted                                       */
-
-  --font-mono:   'Share Tech Mono', monospace;
-  --font-ui:     'Barlow', sans-serif;
-  --font-head:   'Barlow Condensed', sans-serif;
-
-  --radius:      2px;       /* intentionally tiny — industrial feel        */
-  --transition:  140ms ease;
-
-  --sidebar-w:   280px;
-  --topbar-h:    52px;
-}
-
-/* ─── Reset & base ──────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; overflow: hidden; }
-
-body {
-  background: var(--bg-0);
-  color: var(--text-0);
-  font-family: var(--font-ui);
-  font-size: 14px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* scanline texture on header only */
-.scanlines {
-  position: relative;
-  overflow: hidden;
-}
-.scanlines::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0,0,0,0.18) 2px,
-    rgba(0,0,0,0.18) 4px
-  );
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* ─── Layout ────────────────────────────────────────────────────────────── */
-#app { display: flex; flex-direction: column; height: 100vh; }
-
-/* Topbar */
-#topbar {
-  height: var(--topbar-h);
-  background: var(--bg-1);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 20px;
-  flex-shrink: 0;
-  position: relative;
-  z-index: 100;
-}
-
-.topbar-wordmark {
-  font-family: var(--font-head);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--amber);
-  text-transform: uppercase;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.topbar-wordmark-sub {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-2);
-  letter-spacing: 0.06em;
-  border-left: 1px solid var(--border-hi);
-  padding-left: 10px;
-  margin-left: 2px;
-}
-
-.topbar-sep { flex: 1; }
-
-#global-status {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-2);
-  letter-spacing: 0.04em;
-}
-#global-status.running { color: var(--amber); }
-#global-status.error   { color: var(--red); }
-
-.topbar-btn {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-1);
-  font-family: var(--font-ui);
-  font-size: 12px;
-  padding: 5px 12px;
-  cursor: pointer;
-  transition: var(--transition);
-  border-radius: var(--radius);
-  letter-spacing: 0.04em;
-}
-.topbar-btn:hover { border-color: var(--amber-dim); color: var(--amber); background: var(--amber-glow); }
-.topbar-btn.primary { border-color: var(--amber-dim); color: var(--amber); }
-.topbar-btn.primary:hover { background: var(--amber-glow); }
-.topbar-btn.danger:hover { border-color: var(--red-dim); color: var(--red); background: rgba(232,80,80,0.08); }
-
-/* Main body */
-#main { display: flex; flex: 1; overflow: hidden; }
-
-/* Left sidebar — sessions list */
-#sidebar {
-  width: var(--sidebar-w);
-  background: var(--bg-1);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.sidebar-header {
-  padding: 14px 16px 10px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.sidebar-header h2 {
-  font-family: var(--font-head);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  flex: 1;
-}
-
-#session-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 6px 0;
-}
-#session-list::-webkit-scrollbar { width: 4px; }
-#session-list::-webkit-scrollbar-track { background: transparent; }
-#session-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-.session-item {
-  padding: 10px 16px;
-  cursor: pointer;
-  border-left: 2px solid transparent;
-  transition: var(--transition);
-  position: relative;
-}
-.session-item:hover { background: var(--bg-2); }
-.session-item.active {
-  background: var(--bg-2);
-  border-left-color: var(--amber);
-}
-.session-name {
-  font-family: var(--font-head);
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--text-0);
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.session-meta {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-2);
-  margin-top: 2px;
-  letter-spacing: 0.03em;
-}
-.session-del {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  opacity: 0;
-  background: none;
-  border: none;
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px 4px;
-  transition: var(--transition);
-  line-height: 1;
-}
-.session-item:hover .session-del { opacity: 1; }
-.session-del:hover { color: var(--red); }
-
-/* Center workspace */
-#workspace {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--bg-0);
-}
-
-/* ─── Empty state ───────────────────────────────────────────────────────── */
-#empty-state {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  color: var(--text-2);
-}
-#empty-state .empty-icon {
-  font-size: 48px;
-  opacity: 0.3;
-  filter: grayscale(1);
-}
-#empty-state h3 {
-  font-family: var(--font-head);
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-2);
-}
-#empty-state p { font-size: 13px; color: var(--text-2); text-align: center; max-width: 320px; }
-
-/* ─── Session workspace ─────────────────────────────────────────────────── */
-#session-workspace {
-  display: none;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-#session-workspace.visible { display: flex; }
-
-/* Session header bar */
-#session-header {
-  padding: 12px 20px 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-1);
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  flex-shrink: 0;
-}
-#session-title {
-  font-family: var(--font-head);
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-0);
-  flex: 1;
-  cursor: pointer;
-  border: 1px solid transparent;
-  padding: 2px 4px;
-  border-radius: var(--radius);
-  transition: var(--transition);
-  outline: none;
-}
-#session-title:focus { border-color: var(--amber-dim); background: var(--bg-2); }
-
-/* Target chips */
-#target-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-1);
-  flex-shrink: 0;
-  min-height: 44px;
-  align-items: center;
-}
-.target-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 3px 8px 3px 6px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-1);
-  cursor: default;
-  transition: var(--transition);
-  position: relative;
-}
-.target-chip:hover { border-color: var(--border-hi); }
-.target-chip .chip-platform {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-2);
-  background: var(--bg-3);
-  padding: 1px 4px;
-  border-radius: 1px;
-}
-.target-chip .chip-status {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--text-2);
-  flex-shrink: 0;
-}
-.target-chip .chip-status.fresh  { background: var(--green); box-shadow: 0 0 4px var(--green); }
-.target-chip .chip-status.stale  { background: var(--amber); }
-.target-chip .chip-status.absent { background: var(--red); }
-.target-chip .chip-remove {
-  background: none;
-  border: none;
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 0 0 0 2px;
-  line-height: 1;
-  transition: var(--transition);
-  opacity: 0;
-}
-.target-chip:hover .chip-remove { opacity: 1; }
-.target-chip .chip-remove:hover { color: var(--red); }
-
-/* Add-target inline form */
-#add-target-form {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-#add-platform-select, #add-username-input {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  color: var(--text-1);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 3px 6px;
-  border-radius: var(--radius);
-  outline: none;
-  transition: var(--transition);
-}
-#add-platform-select { cursor: pointer; }
-#add-platform-select:focus, #add-username-input:focus { border-color: var(--amber-dim); }
-#add-username-input { width: 120px; }
-#add-username-input::placeholder { color: var(--text-2); }
-#add-target-btn {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  font-size: 16px;
-  line-height: 1;
-  padding: 2px 7px;
-  cursor: pointer;
-  border-radius: var(--radius);
-  transition: var(--transition);
-  font-family: var(--font-mono);
-}
-#add-target-btn:hover { border-color: var(--green-dim); color: var(--green); }
-
-/* ─── Query bar ─────────────────────────────────────────────────────────── */
-#query-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-1);
-  flex-shrink: 0;
-}
-
-#query-input {
-  flex: 1;
-  background: var(--bg-0);
-  border: 1px solid var(--border);
-  color: var(--text-0);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  outline: none;
-  transition: var(--transition);
-  caret-color: var(--amber);
-}
-#query-input:focus { border-color: var(--amber-dim); box-shadow: 0 0 0 2px var(--amber-glow); }
-#query-input::placeholder { color: var(--text-2); }
-
-#refresh-toggle {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-2);
-  cursor: pointer;
-  white-space: nowrap;
-  user-select: none;
-}
-#refresh-toggle input { accent-color: var(--amber); cursor: pointer; }
-#refresh-toggle:hover { color: var(--text-1); }
-
-#run-analysis-btn {
-  background: var(--amber-dim);
-  border: 1px solid var(--amber-dim);
-  color: var(--text-0);
-  font-family: var(--font-head);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  padding: 7px 18px;
-  cursor: pointer;
-  border-radius: var(--radius);
-  transition: var(--transition);
-  white-space: nowrap;
-}
-#run-analysis-btn:hover:not(:disabled) {
-  background: var(--amber);
-  border-color: var(--amber);
-  color: var(--bg-0);
-}
-#run-analysis-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-/* ─── Content area: history sidebar + report panel ──────────────────────── */
-#content-area {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-/* History sidebar */
-#history-sidebar {
-  width: 220px;
-  border-right: 1px solid var(--border);
-  background: var(--bg-1);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-.history-header {
-  padding: 10px 14px 8px;
-  border-bottom: 1px solid var(--border);
-}
-.history-header h3 {
-  font-family: var(--font-head);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-2);
-}
-#history-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 0;
-}
-#history-list::-webkit-scrollbar { width: 3px; }
-#history-list::-webkit-scrollbar-thumb { background: var(--border); }
-
-.history-item {
-  padding: 8px 14px;
-  cursor: pointer;
-  border-left: 2px solid transparent;
-  transition: var(--transition);
-}
-.history-item:hover { background: var(--bg-2); }
-.history-item.active { background: var(--bg-2); border-left-color: var(--amber); }
-.history-query {
-  font-size: 12px;
-  color: var(--text-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.4;
-}
-.history-ts {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--text-2);
-  margin-top: 2px;
-  letter-spacing: 0.02em;
-}
-
-/* ─── Report panel ──────────────────────────────────────────────────────── */
-#report-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Progress view (during analysis) */
-#progress-view {
-  display: none;
-  flex-direction: column;
-  padding: 20px;
-  gap: 12px;
-  overflow-y: auto;
-}
-#progress-view.visible { display: flex; }
-
-.progress-stage {
-  font-family: var(--font-head);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--amber);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Spinning indicator */
-@keyframes spin { to { transform: rotate(360deg); } }
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border);
-  border-top-color: var(--amber);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  flex-shrink: 0;
-}
-
-#progress-log {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-2);
-  background: var(--bg-1);
-  border: 1px solid var(--border);
-  padding: 12px;
-  max-height: 280px;
-  overflow-y: auto;
-  line-height: 1.7;
-}
-#progress-log::-webkit-scrollbar { width: 3px; }
-#progress-log::-webkit-scrollbar-thumb { background: var(--border); }
-.log-line { display: block; }
-.log-line.stage  { color: var(--amber); }
-.log-line.error  { color: var(--red); }
-.log-line.complete { color: var(--green); }
-
-/* Report view */
-#report-view {
-  display: none;
-  flex: 1;
-  flex-direction: column;
-  overflow: hidden;
-}
-#report-view.visible { display: flex; }
-
-#report-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-1);
-  flex-shrink: 0;
-}
-.report-query-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-2);
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.report-query-label span { color: var(--amber); }
-
-#report-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 28px 32px;
-}
-#report-content::-webkit-scrollbar { width: 4px; }
-#report-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-/* Markdown rendering styles */
-#report-content h1, #report-content h2, #report-content h3,
-#report-content h4, #report-content h5 {
-  font-family: var(--font-head);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--text-0);
-  margin: 24px 0 10px;
-}
-#report-content h1 { font-size: 22px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-#report-content h2 { font-size: 18px; color: var(--amber); }
-#report-content h3 { font-size: 15px; color: var(--text-0); }
-#report-content p { margin: 0 0 12px; color: var(--text-1); line-height: 1.7; }
-#report-content ul, #report-content ol { margin: 0 0 12px 20px; }
-#report-content li { color: var(--text-1); line-height: 1.7; margin-bottom: 4px; }
-#report-content strong { color: var(--text-0); font-weight: 600; }
-#report-content em { color: var(--amber); font-style: normal; }
-#report-content code {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  padding: 1px 5px;
-  color: var(--green);
-}
-#report-content pre {
-  background: var(--bg-1);
-  border: 1px solid var(--border);
-  padding: 14px;
-  overflow-x: auto;
-  margin: 0 0 14px;
-}
-#report-content pre code { background: none; border: none; padding: 0; }
-#report-content blockquote {
-  border-left: 3px solid var(--amber-dim);
-  padding: 6px 14px;
-  margin: 0 0 12px;
-  background: var(--amber-glow);
-}
-#report-content blockquote p { color: var(--text-0); }
-#report-content hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
-#report-content a { color: var(--blue); text-decoration: none; }
-#report-content a:hover { text-decoration: underline; }
-#report-content table { border-collapse: collapse; width: 100%; margin-bottom: 14px; }
-#report-content th {
-  font-family: var(--font-head);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  padding: 6px 10px;
-  text-align: left;
-}
-#report-content td {
-  border: 1px solid var(--border);
-  padding: 6px 10px;
-  color: var(--text-1);
-  font-size: 13px;
-}
-#report-content tr:nth-child(even) td { background: var(--bg-1); }
-
-/* ─── Cache panel ────────────────────────────────────────────────────────── */
-#cache-panel {
-  display: none;
-  flex: 1;
-  flex-direction: column;
-  overflow: hidden;
-}
-#cache-panel.visible { display: flex; }
-
-#cache-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-1);
-  flex-shrink: 0;
-}
-#cache-toolbar h3 {
-  font-family: var(--font-head);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  flex: 1;
-}
-
-#cache-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-.cache-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-.cache-table th {
-  font-family: var(--font-head);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  text-align: left;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-1);
-}
-.cache-table td {
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-1);
-}
-.cache-table tr:hover td { background: var(--bg-1); }
-.cache-badge {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 1px;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-family: var(--font-head);
-}
-.cache-badge.fresh { background: var(--green-dim); color: var(--green); }
-.cache-badge.stale { background: var(--red-dim); color: var(--red); }
-
-/* ─── Modal overlay ──────────────────────────────────────────────────────── */
-#modal-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.7);
-  z-index: 1000;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(2px);
-}
-#modal-overlay.visible { display: flex; }
-
-.modal {
-  background: var(--bg-1);
-  border: 1px solid var(--border-hi);
-  padding: 28px 32px;
-  width: 480px;
-  max-width: 90vw;
-  position: relative;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-}
-.modal h2 {
-  font-family: var(--font-head);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--amber);
-  margin-bottom: 20px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.modal label {
-  display: block;
-  font-family: var(--font-head);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  margin: 14px 0 5px;
-}
-.modal label:first-of-type { margin-top: 0; }
-.modal input, .modal select {
-  width: 100%;
-  background: var(--bg-0);
-  border: 1px solid var(--border);
-  color: var(--text-0);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  padding: 8px 10px;
-  border-radius: var(--radius);
-  outline: none;
-  transition: var(--transition);
-}
-.modal input:focus, .modal select:focus { border-color: var(--amber-dim); }
-.modal-help {
-  font-size: 11px;
-  color: var(--text-2);
-  margin-top: 4px;
-  font-family: var(--font-mono);
-  line-height: 1.5;
-}
-.modal-targets-list {
-  margin: 6px 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-.modal-target-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  padding: 6px 10px;
-  border-radius: var(--radius);
-}
-.modal-target-row .chip-platform {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-2);
-  background: var(--bg-3);
-  padding: 1px 5px;
-  flex-shrink: 0;
-}
-.modal-target-row .target-name {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-0);
-  flex: 1;
-}
-.modal-target-row .remove-target {
-  background: none;
-  border: none;
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: 13px;
-  padding: 0 2px;
-  line-height: 1;
-  transition: var(--transition);
-}
-.modal-target-row .remove-target:hover { color: var(--red); }
-.modal-add-row {
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
-}
-.modal-add-row select, .modal-add-row input {
-  flex: 0 0 auto;
-}
-.modal-add-row select { width: 110px; }
-.modal-add-row input { flex: 1; }
-.modal-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 24px;
-  justify-content: flex-end;
-}
-.btn {
-  font-family: var(--font-head);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  padding: 7px 18px;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition: var(--transition);
-  border: 1px solid var(--border);
-  background: var(--bg-2);
-  color: var(--text-1);
-}
-.btn:hover { border-color: var(--border-hi); color: var(--text-0); }
-.btn.primary {
-  background: var(--amber-dim);
-  border-color: var(--amber-dim);
-  color: var(--text-0);
-}
-.btn.primary:hover { background: var(--amber); border-color: var(--amber); color: var(--bg-0); }
-
-/* ─── Notifications ──────────────────────────────────────────────────────── */
-#notifications {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 2000;
-}
-.notif {
-  background: var(--bg-1);
-  border: 1px solid var(--border-hi);
-  padding: 10px 14px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-1);
-  max-width: 320px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-  animation: notif-in 0.2s ease;
-}
-@keyframes notif-in { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: none; } }
-.notif.success { border-left: 3px solid var(--green); }
-.notif.error   { border-left: 3px solid var(--red); color: var(--red); }
-.notif.info    { border-left: 3px solid var(--blue); }
-
-/* ─── Fetch count input in query bar ─────────────────────────────────────── */
-#fetch-count-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-2);
-  white-space: nowrap;
-}
-#fetch-count-wrapper input {
-  width: 48px;
-  background: var(--bg-0);
-  border: 1px solid var(--border);
-  color: var(--text-1);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 3px 6px;
-  border-radius: var(--radius);
-  outline: none;
-  text-align: center;
-  transition: var(--transition);
-}
-#fetch-count-wrapper input:focus { border-color: var(--amber-dim); }
-
-/* ─── Utilities ──────────────────────────────────────────────────────────── */
-.hidden  { display: none !important; }
-.mono    { font-family: var(--font-mono); }
-.muted   { color: var(--text-2); }
-.amber   { color: var(--amber); }
-.green   { color: var(--green); }
-.red     { color: var(--red); }
-</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 </head>
 <body>
-
-<!-- ═══════════════════════════════════════════ MARKUP ══ -->
-
 <div id="app">
 
   <!-- Topbar -->
-  <header id="topbar" class="scanlines">
-    <div class="topbar-wordmark">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.8">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
-      </svg>
-      OSINT Agent
-      <span class="topbar-wordmark-sub">SOCIAL INTELLIGENCE PLATFORM</span>
+  <header id="topbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/>
+          <path d="M11 8v6M8 11h6"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">OSINT Agent</div>
+        <div class="brand-sub">Social Intelligence</div>
+      </div>
     </div>
 
-    <div class="topbar-sep"></div>
+    <div id="global-status">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">Ready</span>
+    </div>
 
-    <span id="global-status">READY</span>
+    <div class="topbar-spacer"></div>
 
-    <button class="topbar-btn" id="btn-show-cache">Cache Status</button>
-    <button class="topbar-btn primary" id="btn-new-session">+ New Session</button>
+    <button class="tb-btn" id="btn-cache-mgr">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      Cache
+    </button>
+    <button class="tb-btn" id="btn-new-session">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      New Session
+    </button>
+    <button id="theme-toggle" title="Toggle theme">
+      <svg id="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      <svg id="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
   </header>
 
   <!-- Main -->
   <div id="main">
-
-    <!-- Sessions sidebar -->
+    <!-- Left sidebar: sessions -->
     <nav id="sidebar">
-      <div class="sidebar-header">
+      <div class="sidebar-section-header">
         <h2>Sessions</h2>
       </div>
-      <div id="session-list">
-        <!-- populated by JS -->
-      </div>
+      <div id="session-list"></div>
+      <div class="resize-handle" id="sidebar-resize"></div>
     </nav>
 
     <!-- Workspace -->
     <div id="workspace">
-
       <!-- Empty state -->
       <div id="empty-state">
-        <div class="empty-icon">⬡</div>
+        <div class="empty-illustration">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="M16.5 16.5L21 21"/>
+          </svg>
+        </div>
         <h3>No Session Selected</h3>
-        <p>Create a new session to begin an investigation, or select one from the left.</p>
+        <p>Create a new investigation session or select one from the sidebar.</p>
+        <button class="tb-btn primary" onclick="document.getElementById('btn-new-session').click()" style="margin-top:8px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          New Session
+        </button>
       </div>
 
       <!-- Session workspace -->
       <div id="session-workspace">
-
-        <!-- Session header -->
         <div id="session-header">
-          <div id="session-title" contenteditable="true" spellcheck="false" title="Click to rename"></div>
-          <div style="display:flex;gap:8px;flex-shrink:0">
-            <button class="topbar-btn" id="btn-manage-targets">Manage Targets</button>
-            <button class="topbar-btn danger" id="btn-delete-session">Delete</button>
-          </div>
+          <div id="session-title" contenteditable="true" spellcheck="false"></div>
+          <button class="tb-btn primary" id="btn-export-session" title="Export full readable investigation report">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Export Full Report (MD)
+          </button>
+          <button class="tb-btn" id="btn-manage-targets">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Targets
+          </button>
+          <button class="tb-btn" id="btn-delete-session" style="color:var(--text-tertiary)">Delete</button>
         </div>
 
-        <!-- Target chips bar -->
+        <!-- Target chips -->
         <div id="target-chips">
-          <!-- chips populated by JS, plus add-target inline -->
           <form id="add-target-form" onsubmit="return false;">
-            <select id="add-platform-select" title="Platform">
+            <select id="add-platform-select" class="inline-select">
               <option value="twitter">twitter</option>
               <option value="reddit">reddit</option>
               <option value="github">github</option>
@@ -1033,920 +103,158 @@ body {
               <option value="mastodon">mastodon</option>
               <option value="hackernews">hackernews</option>
             </select>
-            <input id="add-username-input" type="text" placeholder="username" autocomplete="off" autocorrect="off" spellcheck="false">
-            <button id="add-target-btn" type="submit" title="Add target">+</button>
+            <input id="add-username-input" class="inline-input" type="text" placeholder="username" autocomplete="off" autocorrect="off" spellcheck="false">
+            <button class="add-btn" type="submit" title="Add">+</button>
           </form>
         </div>
 
         <!-- Query bar -->
         <div id="query-bar">
-          <input id="query-input" type="text"
-            placeholder="What are you looking for? e.g. 'Identify travel patterns and affiliations'"
-            autocomplete="off" autocorrect="off" spellcheck="false">
-
-          <div id="fetch-count-wrapper">
-            <label for="fetch-count-input">posts</label>
-            <input id="fetch-count-input" type="number" value="50" min="10" max="200" step="10">
+          <input id="query-input" type="text" placeholder="What are you investigating? e.g. 'Identify network connections and travel patterns'" autocomplete="off">
+          <div class="query-control">
+            <span>Posts</span>
+            <input type="number" id="fetch-count-input" value="50" min="10" max="200" step="10">
           </div>
-
-          <label id="refresh-toggle" title="Bypass 24h cache and re-fetch all data">
+          <label class="query-control">
             <input type="checkbox" id="force-refresh-check">
-            force refresh
+            <span>Force refresh</span>
           </label>
-
-          <button id="run-analysis-btn">Run Analysis</button>
+          <button class="run-btn" id="run-analysis-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Run Analysis
+          </button>
         </div>
 
-        <!-- Content: history + report/progress/cache -->
+        <!-- Content area -->
         <div id="content-area">
-
           <!-- History sidebar -->
           <div id="history-sidebar">
-            <div class="history-header"><h3>Query History</h3></div>
-            <div id="history-list"><!-- populated by JS --></div>
+            <div class="panel-header"><h3>History</h3></div>
+            <div id="history-list"></div>
+            <div class="resize-handle" id="history-resize"></div>
           </div>
 
-          <!-- Report panel -->
-          <div id="report-panel">
-
+          <!-- Center panel -->
+          <div id="center-panel">
+            <div class="center-tabs">
+              <button class="center-tab-btn active" data-center-tab="report">Report</button>
+              <button class="center-tab-btn" data-center-tab="timeline">Timeline</button>
+            </div>
+            
             <!-- Progress view -->
             <div id="progress-view">
-              <div class="progress-stage">
+              <div class="progress-header">
                 <div class="spinner"></div>
-                <span id="progress-stage-label">Initialising...</span>
+                <div class="progress-label" id="progress-stage-label">Initialising...</div>
               </div>
               <div id="progress-log"></div>
             </div>
 
             <!-- Report view -->
-            <div id="report-view">
+            <div id="report-view" class="center-pane visible">
               <div id="report-toolbar">
-                <div class="report-query-label">
-                  Query: <span id="report-query-label-text"></span>
+                <div class="report-query-badge">
+                  <strong>Query:</strong> <span id="report-query-label-text"></span>
                 </div>
-                <button class="topbar-btn" id="btn-copy-report">Copy Markdown</button>
+                <button class="tb-btn" id="btn-download-md" title="Download report as Markdown">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> Download MD
+                </button>
+                <button class="tb-btn" id="btn-copy-report">Copy</button>
               </div>
               <div id="report-content"></div>
             </div>
-
-            <!-- Cache panel (replaces report view when Cache Status is open) -->
-            <div id="cache-panel">
-              <div id="cache-toolbar">
-                <h3>Cache Status</h3>
-                <button class="topbar-btn danger" id="btn-purge-all">Purge All</button>
-                <button class="topbar-btn" id="btn-close-cache">✕ Close</button>
+            
+            <!-- Timeline view -->
+            <div id="timeline-view" class="center-pane">
+              <div class="timeline-section">
+                <h2 class="timeline-title">Chronological Activity</h2>
+                <p class="timeline-subtitle">Distribution of posts over historical time.</p>
+                <div id="chronological-container">
+                  <div class="timeline-empty">Loading timeline...</div>
+                </div>
               </div>
-              <div id="cache-content">
-                <p class="muted mono" style="font-size:11px">Loading...</p>
+              
+              <hr class="divider" style="margin: 32px 0;">
+
+              <div class="timeline-section">
+                <h2 class="timeline-title">Pattern of Life (Post Frequency)</h2>
+                <p class="timeline-subtitle">Aggregate volume by day of week and hour (UTC) across all historical posts.</p>
+                <div id="heatmap-container">
+                  <div class="timeline-empty">Loading heatmap...</div>
+                </div>
+              </div>
+            </div>
+            
+          </div>
+
+          <!-- Right panel: Contacts + Entities + Media -->
+          <div id="right-panel">
+            <div class="resize-handle" style="left:-3px;right:auto;" id="right-resize"></div>
+            <div class="tab-bar">
+              <button class="tab-btn active" data-tab="contacts">
+                Contacts
+                <span class="tab-badge" id="contacts-badge" style="display:none">0</span>
+              </button>
+              <button class="tab-btn" data-tab="entities">Entities</button>
+              <button class="tab-btn" data-tab="media">Media</button>
+            </div>
+
+            <!-- Contacts tab -->
+            <div class="tab-pane active" id="contacts-tab">
+              <div id="contacts-toolbar">
+                <input class="contacts-search" id="contacts-search" type="text" placeholder="Filter contacts…" autocomplete="off">
+                <button class="tb-btn" id="btn-refresh-contacts" title="Refresh contacts">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                </button>
+              </div>
+              <div id="graph-container">
+                <div class="graph-empty" id="graph-empty">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+                  <span>Run an analysis to<br>build the network graph</span>
+                </div>
+              </div>
+              <div id="contacts-list">
+                <div class="contacts-empty" id="contacts-empty">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                  No contacts discovered yet. Run an analysis to extract network contacts.
+                </div>
               </div>
             </div>
 
-          </div><!-- /report-panel -->
+            <!-- Entities tab -->
+            <div class="tab-pane" id="entities-tab">
+              <div id="entities-content">
+                <div style="color:var(--text-tertiary);text-align:center;padding:32px 16px;font-size:11px;">Run an analysis to extract selectors (emails, locations, crypto, etc.)</div>
+              </div>
+            </div>
+
+            <!-- Media tab -->
+            <div class="tab-pane" id="media-tab">
+              <div class="media-grid" id="media-grid-content">
+                <div style="grid-column:1/-1;color:var(--text-tertiary);text-align:center;padding:32px 16px;font-size:11px;">No media files downloaded yet.</div>
+              </div>
+            </div>
+
+          </div><!-- /right-panel -->
         </div><!-- /content-area -->
       </div><!-- /session-workspace -->
     </div><!-- /workspace -->
   </div><!-- /main -->
 </div><!-- /app -->
 
-<!-- Modal overlay -->
+<!-- Modals -->
 <div id="modal-overlay">
-  <div class="modal" id="modal">
-    <!-- content injected by JS -->
-  </div>
+  <!-- Dynamic Modal Content Area -->
+  <div class="modal" id="modal"></div>
 </div>
 
 <!-- Notifications -->
 <div id="notifications"></div>
 
-
-<!-- ═══════════════════════════════════════════ JAVASCRIPT ══ -->
-<script>
-'use strict';
-
-/* ─────────────────────────────── State ────────────────────────────────── */
-const state = {
-  sessions: [],          // summary list from API
-  currentSession: null,  // full session object
-  activeQueryId: null,   // which history entry is shown
-  runningJobId: null,    // active SSE job
-  sseSource: null,       // EventSource instance
-  cacheEntries: [],      // latest cache status
-};
-
-/* ─────────────────────────────── API helpers ──────────────────────────── */
-const API = '/api/v1';
-
-async function api(method, path, body) {
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  };
-  if (body !== undefined) opts.body = JSON.stringify(body);
-  const res = await fetch(API + path, opts);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
-  }
-  if (res.status === 204) return null;
-  return res.json();
-}
-
-const get  = (path)       => api('GET', path);
-const post = (path, body) => api('POST', path, body);
-const put  = (path, body) => api('PUT', path, body);
-const del  = (path)       => api('DELETE', path);
-const patch = (path, body) => api('PATCH', path, body);
-
-/* ─────────────────────────────── Notifications ────────────────────────── */
-function notify(msg, type = 'info', duration = 3500) {
-  const el = document.createElement('div');
-  el.className = `notif ${type}`;
-  el.textContent = msg;
-  document.getElementById('notifications').appendChild(el);
-  setTimeout(() => el.remove(), duration);
-}
-
-/* ─────────────────────────────── Date helpers ─────────────────────────── */
-function fmtAge(isoTs) {
-  if (!isoTs) return '—';
-  const d = new Date(isoTs);
-  const secs = (Date.now() - d) / 1000;
-  if (secs < 60)   return `${Math.round(secs)}s ago`;
-  if (secs < 3600) return `${Math.round(secs/60)}m ago`;
-  if (secs < 86400) return `${Math.round(secs/3600)}h ago`;
-  return `${Math.round(secs/86400)}d ago`;
-}
-
-function fmtDate(isoTs) {
-  if (!isoTs) return '—';
-  return new Date(isoTs).toLocaleString(undefined, {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-  });
-}
-
-/* ─────────────────────────────── Sessions sidebar ─────────────────────── */
-function renderSessionList() {
-  const list = document.getElementById('session-list');
-  if (!state.sessions.length) {
-    list.innerHTML = '<p style="padding:16px;font-size:11px;color:var(--text-2);font-family:var(--font-mono)">No sessions yet.</p>';
-    return;
-  }
-  list.innerHTML = state.sessions.map(s => `
-    <div class="session-item ${state.currentSession?.session_id === s.session_id ? 'active' : ''}"
-         data-id="${s.session_id}" onclick="loadSession('${s.session_id}')">
-      <div class="session-name">${esc(s.name)}</div>
-      <div class="session-meta">${s.target_count} target${s.target_count !== 1 ? 's' : ''} · ${s.query_count} quer${s.query_count !== 1 ? 'ies' : 'y'} · ${fmtAge(s.updated_at)}</div>
-      <button class="session-del" onclick="event.stopPropagation();deleteSession('${s.session_id}')" title="Delete session">×</button>
-    </div>
-  `).join('');
-}
-
-async function refreshSessionList() {
-  try {
-    const data = await get('/sessions');
-    state.sessions = data.sessions;
-    renderSessionList();
-  } catch (e) {
-    notify(`Failed to load sessions: ${e.message}`, 'error');
-  }
-}
-
-/* ─────────────────────────────── Load / display session ────────────────── */
-async function loadSession(sessionId) {
-  try {
-    const session = await get(`/sessions/${sessionId}`);
-    state.currentSession = session;
-    state.activeQueryId = null;
-    showSessionWorkspace(session);
-    renderSessionList(); // update active highlight
-  } catch (e) {
-    notify(`Failed to load session: ${e.message}`, 'error');
-  }
-}
-
-function showSessionWorkspace(session) {
-  document.getElementById('empty-state').classList.add('hidden');
-  const ws = document.getElementById('session-workspace');
-  ws.classList.add('visible');
-
-  // Reset any display:none values that may have been set when opening the cache
-  // panel without an active session. These elements are hidden in that path and
-  // must be restored whenever a session becomes active.
-  document.getElementById('session-header').style.display = '';
-  document.getElementById('target-chips').style.display = '';
-  document.getElementById('query-bar').style.display = '';
-  document.getElementById('history-sidebar').style.display = '';
-
-  // Title
-  const titleEl = document.getElementById('session-title');
-  titleEl.textContent = session.name;
-
-  // Cache status for chips
-  loadCacheStatus().then(() => renderTargetChips(session));
-
-  // History
-  renderHistory(session);
-
-  // Show most recent report if any, else show empty report view
-  if (session.query_history?.length) {
-    const latest = session.query_history[session.query_history.length - 1];
-    showReport(latest);
-    state.activeQueryId = latest.query_id;
-    renderHistory(session);
-  } else {
-    showEmptyReport();
-  }
-
-  // Hide cache panel
-  document.getElementById('cache-panel').classList.remove('visible');
-}
-
-function showEmptyReport() {
-  document.getElementById('progress-view').classList.remove('visible');
-  document.getElementById('report-view').classList.remove('visible');
-  document.getElementById('cache-panel').classList.remove('visible');
-}
-
-/* ─────────────────────────────── Target chips ─────────────────────────── */
-function renderTargetChips(session) {
-  const container = document.getElementById('target-chips');
-  const form = document.getElementById('add-target-form');
-
-  // Remove old chips (but not the add-form)
-  Array.from(container.querySelectorAll('.target-chip')).forEach(c => c.remove());
-
-  // Build platform->username list
-  const targets = [];
-  for (const [platform, usernames] of Object.entries(session.platforms || {})) {
-    for (const username of usernames) {
-      targets.push({ platform, username });
-    }
-  }
-
-  // Look up cache status for each
-  targets.forEach(({ platform, username }) => {
-    const entry = state.cacheEntries.find(
-      e => e.platform === platform && e.username === username
-    );
-    let statusClass = 'absent';
-    let title = 'Not cached';
-    if (entry) {
-      statusClass = entry.is_fresh ? 'fresh' : 'stale';
-      title = entry.is_fresh
-        ? `Cached ${fmtAge(entry.cached_at)} · ${entry.post_count} posts`
-        : `Stale cache (${fmtAge(entry.cached_at)}) · ${entry.post_count} posts`;
-    }
-
-    const chip = document.createElement('div');
-    chip.className = 'target-chip';
-    chip.title = title;
-    chip.innerHTML = `
-      <div class="chip-status ${statusClass}"></div>
-      <span class="chip-platform">${esc(platform)}</span>
-      <span>${esc(username)}</span>
-      <button class="chip-remove" title="Remove target"
-              onclick="removeTarget('${esc(platform)}','${esc(username)}')">×</button>
-    `;
-    container.insertBefore(chip, form);
-  });
-}
-
-async function removeTarget(platform, username) {
-  if (!state.currentSession) return;
-  const s = state.currentSession;
-  const updated = {};
-  for (const [p, users] of Object.entries(s.platforms || {})) {
-    const remaining = users.filter(u => !(p === platform && u === username));
-    if (remaining.length) updated[p] = remaining;
-  }
-  if (Object.keys(updated).length === 0) {
-    notify('Cannot remove the last target — manage targets to change platforms.', 'info');
-    return;
-  }
-  try {
-    await put(`/sessions/${s.session_id}/targets`, { platforms: updated });
-    s.platforms = updated;
-    renderTargetChips(s);
-    notify(`Removed ${platform}/${username}`, 'info');
-  } catch (e) {
-    notify(`Remove failed: ${e.message}`, 'error');
-  }
-}
-
-/* Add-target inline form */
-document.getElementById('add-target-form').addEventListener('submit', async () => {
-  const platform = document.getElementById('add-platform-select').value;
-  const username = document.getElementById('add-username-input').value.trim().replace(/^@/, '');
-  if (!username) return;
-  if (!state.currentSession) return;
-
-  const s = state.currentSession;
-  const updated = JSON.parse(JSON.stringify(s.platforms || {}));
-  if (!updated[platform]) updated[platform] = [];
-  if (updated[platform].includes(username)) {
-    notify(`${platform}/${username} already added`, 'info');
-    return;
-  }
-  updated[platform].push(username);
-
-  try {
-    await put(`/sessions/${s.session_id}/targets`, { platforms: updated });
-    s.platforms = updated;
-    document.getElementById('add-username-input').value = '';
-    renderTargetChips(s);
-    notify(`Added ${platform}/${username}`, 'success', 2000);
-  } catch (e) {
-    notify(`Failed to add target: ${e.message}`, 'error');
-  }
-});
-
-/* ─────────────────────────────── Query history ─────────────────────────── */
-function renderHistory(session) {
-  const list = document.getElementById('history-list');
-  const history = session.query_history || [];
-  if (!history.length) {
-    list.innerHTML = '<p style="padding:12px 14px;font-size:10px;color:var(--text-2);font-family:var(--font-mono)">No queries yet.</p>';
-    return;
-  }
-  // Newest first
-  list.innerHTML = [...history].reverse().map(entry => `
-    <div class="history-item ${state.activeQueryId === entry.query_id ? 'active' : ''}"
-         data-qid="${entry.query_id}"
-         onclick="showHistoryEntry('${entry.query_id}')">
-      <div class="history-query">${esc(entry.query)}</div>
-      <div class="history-ts">${fmtDate(entry.timestamp)}</div>
-    </div>
-  `).join('');
-}
-
-function showHistoryEntry(queryId) {
-  const session = state.currentSession;
-  if (!session) return;
-  const entry = session.query_history?.find(e => e.query_id === queryId);
-  if (!entry) return;
-  state.activeQueryId = queryId;
-  renderHistory(session);
-  showReport(entry);
-}
-
-/* ─────────────────────────────── Report rendering ─────────────────────── */
-function showReport(entry) {
-  document.getElementById('progress-view').classList.remove('visible');
-  document.getElementById('cache-panel').classList.remove('visible');
-
-  const reportView = document.getElementById('report-view');
-  reportView.classList.add('visible');
-
-  document.getElementById('report-query-label-text').textContent = entry.query;
-
-  const content = document.getElementById('report-content');
-  // marked.js renders the markdown safely
-  content.innerHTML = marked.parse(entry.report || '*(no report content)*');
-}
-
-document.getElementById('btn-copy-report').addEventListener('click', () => {
-  const session = state.currentSession;
-  const entry = session?.query_history?.find(e => e.query_id === state.activeQueryId);
-  if (!entry) return;
-  navigator.clipboard.writeText(entry.report || '').then(() => {
-    notify('Report copied to clipboard', 'success', 2000);
-  });
-});
-
-/* ─────────────────────────────── Analysis run ──────────────────────────── */
-document.getElementById('run-analysis-btn').addEventListener('click', async () => {
-  const session = state.currentSession;
-  if (!session) return;
-
-  const query = document.getElementById('query-input').value.trim();
-  if (!query) {
-    notify('Enter an analysis query first', 'info');
-    document.getElementById('query-input').focus();
-    return;
-  }
-
-  const forceRefresh = document.getElementById('force-refresh-check').checked;
-  const fetchCount   = parseInt(document.getElementById('fetch-count-input').value, 10) || 50;
-
-
-  try {
-    // Update fetch count on the session BEFORE starting the job so the
-    // job reads the correct fetch_options when it loads the session file.
-    const fetchOptions = {
-      default_count: fetchCount,
-      targets: session.fetch_options?.targets || {},
-    };
-    await put(`/sessions/${session.session_id}/targets`, {
-      platforms: session.platforms,
-      fetch_options: fetchOptions,
-    });
-    session.fetch_options = fetchOptions;
-
-    // Start the job — server reads session.fetch_options from disk at this point
-    const job = await post(`/sessions/${session.session_id}/analyse`, {
-      query,
-      force_refresh: forceRefresh,
-    });
-
-    startProgressView(job.job_id, query);
-  } catch (e) {
-    if (e.message.includes('already has a running')) {
-      notify('An analysis is already running for this session.', 'info');
-    } else {
-      notify(`Failed to start analysis: ${e.message}`, 'error');
-    }
-  }
-});
-
-function startProgressView(jobId, query) {
-  state.runningJobId = jobId;
-
-  // Disable run button
-  document.getElementById('run-analysis-btn').disabled = true;
-  setGlobalStatus('running', 'RUNNING');
-
-  // Show progress panel
-  document.getElementById('report-view').classList.remove('visible');
-  document.getElementById('cache-panel').classList.remove('visible');
-  const pv = document.getElementById('progress-view');
-  pv.classList.add('visible');
-
-  document.getElementById('progress-stage-label').textContent = 'Starting analysis...';
-  document.getElementById('progress-log').innerHTML = '';
-
-  appendLog('info', `Query: ${query}`);
-
-  // Open SSE stream
-  if (state.sseSource) state.sseSource.close();
-
-  const es = new EventSource(`${API}/jobs/${jobId}/stream`);
-  state.sseSource = es;
-
-  function handleEvent(type, data) {
-    if (type === 'stage') {
-      document.getElementById('progress-stage-label').textContent = data.message || type;
-      appendLog('stage', `▶ ${data.message || type}`);
-    } else if (type === 'log') {
-      appendLog('info', data.message);
-    } else if (type === 'status') {
-      appendLog('info', `  ${data.message}`);
-    } else if (type === 'complete') {
-      appendLog('complete', '✓ Analysis complete');
-      document.getElementById('progress-stage-label').textContent = 'Complete';
-      finishAnalysis(jobId);
-    } else if (type === 'error') {
-      appendLog('error', `✗ Error: ${data.message}`);
-      document.getElementById('progress-stage-label').textContent = 'Error';
-      setGlobalStatus('error', 'ERROR');
-      document.getElementById('run-analysis-btn').disabled = false;
-      notify(`Analysis error: ${data.message}`, 'error', 6000);
-    }
-  }
-
-  ['stage', 'log', 'status', 'complete', 'error'].forEach(evtType => {
-    es.addEventListener(evtType, (e) => {
-      try { handleEvent(evtType, JSON.parse(e.data)); } catch {}
-    });
-  });
-
-  es.onerror = () => {
-    // SSE connection lost — fall back to polling
-    es.close();
-    pollJobStatus(jobId);
-  };
-}
-
-function appendLog(cls, msg) {
-  const log = document.getElementById('progress-log');
-  const line = document.createElement('span');
-  line.className = `log-line ${cls}`;
-  line.textContent = msg;
-  log.appendChild(line);
-  log.appendChild(document.createElement('br'));
-  log.scrollTop = log.scrollHeight;
-}
-
-async function finishAnalysis(jobId) {
-  if (state.sseSource) { state.sseSource.close(); state.sseSource = null; }
-
-  document.getElementById('run-analysis-btn').disabled = false;
-  setGlobalStatus('', 'READY');
-  document.getElementById('force-refresh-check').checked = false;
-
-  // Reload session to pick up the new history entry
-  try {
-    const session = await get(`/sessions/${state.currentSession.session_id}`);
-    state.currentSession = session;
-    renderHistory(session);
-    await refreshSessionList();
-
-    // Show the latest result
-    if (session.query_history?.length) {
-      const latest = session.query_history[session.query_history.length - 1];
-      state.activeQueryId = latest.query_id;
-      renderHistory(session);
-      showReport(latest);
-    }
-
-    // Refresh chip cache status
-    await loadCacheStatus();
-    renderTargetChips(session);
-  } catch (e) {
-    notify(`Could not reload session: ${e.message}`, 'error');
-  }
-}
-
-async function pollJobStatus(jobId) {
-  // Fallback polling when SSE disconnects
-  const poll = async () => {
-    try {
-      const job = await get(`/jobs/${jobId}`);
-      if (job.status === 'complete') { finishAnalysis(jobId); return; }
-      if (job.status === 'error') {
-        notify(`Analysis failed: ${job.error}`, 'error', 6000);
-        document.getElementById('run-analysis-btn').disabled = false;
-        setGlobalStatus('error', 'ERROR');
-        return;
-      }
-      if (job.progress?.message) {
-        document.getElementById('progress-stage-label').textContent = job.progress.message;
-      }
-      setTimeout(poll, 2000);
-    } catch (e) {
-      setTimeout(poll, 3000);
-    }
-  };
-  poll();
-}
-
-/* ─────────────────────────────── Global status ─────────────────────────── */
-function setGlobalStatus(cls, text) {
-  const el = document.getElementById('global-status');
-  el.textContent = text;
-  el.className = cls;
-}
-
-/* ─────────────────────────────── Session title editing ─────────────────── */
-const titleEl = document.getElementById('session-title');
-
-titleEl.addEventListener('blur', async () => {
-  const newName = titleEl.textContent.trim();
-  if (!newName || !state.currentSession) return;
-  if (newName === state.currentSession.name) return;
-  try {
-    await patch(`/sessions/${state.currentSession.session_id}/rename`, { name: newName });
-    state.currentSession.name = newName;
-    await refreshSessionList();
-    notify('Session renamed', 'success', 2000);
-  } catch (e) {
-    titleEl.textContent = state.currentSession.name; // revert
-    notify(`Rename failed: ${e.message}`, 'error');
-  }
-});
-
-titleEl.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); }
-  if (e.key === 'Escape') {
-    titleEl.textContent = state.currentSession?.name || '';
-    titleEl.blur();
-  }
-});
-
-/* ─────────────────────────────── Delete session ────────────────────────── */
-document.getElementById('btn-delete-session').addEventListener('click', async () => {
-  const s = state.currentSession;
-  if (!s) return;
-  if (!confirm(`Delete session "${s.name}"? This cannot be undone.`)) return;
-  await deleteSession(s.session_id);
-});
-
-async function deleteSession(sessionId) {
-  try {
-    await del(`/sessions/${sessionId}`);
-    if (state.currentSession?.session_id === sessionId) {
-      state.currentSession = null;
-      document.getElementById('session-workspace').classList.remove('visible');
-      document.getElementById('empty-state').classList.remove('hidden');
-    }
-    await refreshSessionList();
-    notify('Session deleted', 'info', 2000);
-  } catch (e) {
-    notify(`Delete failed: ${e.message}`, 'error');
-  }
-}
-
-/* ─────────────────────────────── New Session modal ─────────────────────── */
-document.getElementById('btn-new-session').addEventListener('click', openNewSessionModal);
-
-function openNewSessionModal() {
-  const modal = document.getElementById('modal');
-  // Staging list of targets to add
-  const newTargets = [];
-
-  function render() {
-    modal.innerHTML = `
-      <h2>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-        New Session
-      </h2>
-      <label>Session Name</label>
-      <input id="ns-name" type="text" placeholder="Operation Nightfall" value="" autocomplete="off">
-
-      <label>Targets</label>
-      <div class="modal-targets-list" id="ns-targets">
-        ${newTargets.map((t, i) => `
-          <div class="modal-target-row">
-            <span class="chip-platform">${esc(t.platform)}</span>
-            <span class="target-name">${esc(t.username)}</span>
-            <button class="remove-target" onclick="nsRemoveTarget(${i})">×</button>
-          </div>
-        `).join('') || '<p style="font-size:11px;color:var(--text-2);font-family:var(--font-mono);padding:4px 0">No targets added yet.</p>'}
-      </div>
-      <div class="modal-add-row" style="margin-top:8px">
-        <select id="ns-platform">
-          <option value="twitter">twitter</option>
-          <option value="reddit">reddit</option>
-          <option value="github">github</option>
-          <option value="bluesky">bluesky</option>
-          <option value="mastodon">mastodon</option>
-          <option value="hackernews">hackernews</option>
-        </select>
-        <input id="ns-username" type="text" placeholder="username" autocomplete="off" autocorrect="off" spellcheck="false">
-        <button class="btn" onclick="nsAddTarget()" style="flex-shrink:0;padding:6px 12px">Add</button>
-      </div>
-      <p class="modal-help">You can add more targets after creating the session.</p>
-
-      <label>Initial Post Count</label>
-      <input id="ns-count" type="number" value="50" min="10" max="200" step="10">
-      <p class="modal-help">Number of recent posts to fetch per target (10–200). Default: 50.</p>
-
-      <div class="modal-actions">
-        <button class="btn" onclick="closeModal()">Cancel</button>
-        <button class="btn primary" onclick="submitNewSession()">Create Session</button>
-      </div>
-    `;
-    // Focus name input
-    setTimeout(() => document.getElementById('ns-name')?.focus(), 50);
-  }
-
-  // Expose helpers to inline onclick
-  window.nsAddTarget = function() {
-    const p = document.getElementById('ns-platform').value;
-    const u = document.getElementById('ns-username').value.trim().replace(/^@/, '');
-    if (!u) return;
-    if (newTargets.find(t => t.platform === p && t.username === u)) return;
-    newTargets.push({ platform: p, username: u });
-    document.getElementById('ns-username').value = '';
-    render();
-  };
-  window.nsRemoveTarget = function(i) {
-    newTargets.splice(i, 1);
-    render();
-  };
-  window.submitNewSession = async function() {
-    const name = document.getElementById('ns-name')?.value.trim();
-    if (!name) { notify('Enter a session name', 'info'); return; }
-    if (!newTargets.length) { notify('Add at least one target', 'info'); return; }
-    const count = parseInt(document.getElementById('ns-count')?.value, 10) || 50;
-
-    const platforms = {};
-    newTargets.forEach(({ platform, username }) => {
-      if (!platforms[platform]) platforms[platform] = [];
-      platforms[platform].push(username);
-    });
-
-    try {
-      const session = await post('/sessions', {
-        name,
-        platforms,
-        fetch_options: { default_count: count, targets: {} },
-      });
-      closeModal();
-      await refreshSessionList();
-      await loadSession(session.session_id);
-      notify(`Session "${name}" created`, 'success', 2500);
-    } catch (e) {
-      notify(`Failed to create session: ${e.message}`, 'error');
-    }
-  };
-
-  render();
-  document.getElementById('modal-overlay').classList.add('visible');
-}
-
-/* ─────────────────────────────── Manage Targets modal ──────────────────── */
-document.getElementById('btn-manage-targets').addEventListener('click', openManageTargetsModal);
-
-function openManageTargetsModal() {
-  if (!state.currentSession) return;
-  const modal = document.getElementById('modal');
-  const session = state.currentSession;
-
-  // Build mutable copy
-  const targets = [];
-  for (const [platform, usernames] of Object.entries(session.platforms || {})) {
-    for (const username of usernames) targets.push({ platform, username });
-  }
-
-  function render() {
-    modal.innerHTML = `
-      <h2>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-        Manage Targets
-      </h2>
-      <div class="modal-targets-list" id="mt-list">
-        ${targets.map((t, i) => `
-          <div class="modal-target-row">
-            <span class="chip-platform">${esc(t.platform)}</span>
-            <span class="target-name">${esc(t.username)}</span>
-            <button class="remove-target" onclick="mtRemove(${i})">×</button>
-          </div>
-        `).join('') || '<p style="font-size:11px;color:var(--text-2);font-family:var(--font-mono)">No targets.</p>'}
-      </div>
-      <div class="modal-add-row" style="margin-top:10px">
-        <select id="mt-platform">
-          <option value="twitter">twitter</option>
-          <option value="reddit">reddit</option>
-          <option value="github">github</option>
-          <option value="bluesky">bluesky</option>
-          <option value="mastodon">mastodon</option>
-          <option value="hackernews">hackernews</option>
-        </select>
-        <input id="mt-username" type="text" placeholder="username" autocomplete="off" autocorrect="off" spellcheck="false">
-        <button class="btn" onclick="mtAdd()" style="flex-shrink:0;padding:6px 12px">Add</button>
-      </div>
-      <div class="modal-actions">
-        <button class="btn" onclick="closeModal()">Cancel</button>
-        <button class="btn primary" onclick="mtSave()">Save</button>
-      </div>
-    `;
-  }
-
-  window.mtRemove = (i) => { targets.splice(i, 1); render(); };
-  window.mtAdd = () => {
-    const p = document.getElementById('mt-platform').value;
-    const u = document.getElementById('mt-username').value.trim().replace(/^@/, '');
-    if (!u) return;
-    if (targets.find(t => t.platform === p && t.username === u)) return;
-    targets.push({ platform: p, username: u });
-    document.getElementById('mt-username').value = '';
-    render();
-  };
-  window.mtSave = async () => {
-    if (!targets.length) { notify('Add at least one target', 'info'); return; }
-    const platforms = {};
-    targets.forEach(({ platform, username }) => {
-      if (!platforms[platform]) platforms[platform] = [];
-      platforms[platform].push(username);
-    });
-    try {
-      await put(`/sessions/${session.session_id}/targets`, {
-        platforms,
-        fetch_options: session.fetch_options,
-      });
-      session.platforms = platforms;
-      closeModal();
-      renderTargetChips(session);
-      await refreshSessionList();
-      notify('Targets updated', 'success', 2000);
-    } catch (e) {
-      notify(`Save failed: ${e.message}`, 'error');
-    }
-  };
-
-  render();
-  document.getElementById('modal-overlay').classList.add('visible');
-}
-
-/* ─────────────────────────────── Cache panel ────────────────────────────── */
-async function loadCacheStatus() {
-  try {
-    const data = await get('/cache');
-    state.cacheEntries = data.entries;
-  } catch (e) {
-    state.cacheEntries = [];
-  }
-}
-
-document.getElementById('btn-show-cache').addEventListener('click', async () => {
-  await loadCacheStatus();
-  renderCachePanel();
-  document.getElementById('progress-view').classList.remove('visible');
-  document.getElementById('report-view').classList.remove('visible');
-  document.getElementById('cache-panel').classList.add('visible');
-
-  // If no session open, show workspace anyway
-  if (!state.currentSession) {
-    document.getElementById('empty-state').classList.add('hidden');
-    document.getElementById('session-workspace').classList.add('visible');
-    document.getElementById('session-header').style.display = 'none';
-    document.getElementById('target-chips').style.display = 'none';
-    document.getElementById('query-bar').style.display = 'none';
-    document.getElementById('history-sidebar').style.display = 'none';
-  }
-});
-
-document.getElementById('btn-close-cache').addEventListener('click', () => {
-  document.getElementById('cache-panel').classList.remove('visible');
-  // Restore hidden elements if we hid them
-  document.getElementById('session-header').style.display = '';
-  document.getElementById('target-chips').style.display = '';
-  document.getElementById('query-bar').style.display = '';
-  document.getElementById('history-sidebar').style.display = '';
-
-  if (!state.currentSession) {
-    document.getElementById('session-workspace').classList.remove('visible');
-    document.getElementById('empty-state').classList.remove('hidden');
-  } else if (state.activeQueryId) {
-    const entry = state.currentSession.query_history?.find(e => e.query_id === state.activeQueryId);
-    if (entry) showReport(entry);
-  }
-});
-
-function renderCachePanel() {
-  const content = document.getElementById('cache-content');
-  if (!state.cacheEntries.length) {
-    content.innerHTML = '<p class="muted mono" style="font-size:11px;padding:4px 0">No cached data.</p>';
-    return;
-  }
-
-  content.innerHTML = `
-    <table class="cache-table">
-      <thead>
-        <tr>
-          <th>Platform</th>
-          <th>Username</th>
-          <th>Posts</th>
-          <th>Images</th>
-          <th>Cached</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${state.cacheEntries.map(e => `
-          <tr>
-            <td>${esc(e.platform)}</td>
-            <td>${esc(e.username)}</td>
-            <td>${e.post_count}</td>
-            <td>${e.media_analyzed}/${e.media_found} analysed</td>
-            <td>${fmtAge(e.cached_at)}</td>
-            <td><span class="cache-badge ${e.is_fresh ? 'fresh' : 'stale'}">${e.is_fresh ? 'FRESH' : 'STALE'}</span></td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
-}
-
-document.getElementById('btn-purge-all').addEventListener('click', async () => {
-  if (!confirm('Purge ALL cached platform data, media, and outputs? This cannot be undone.')) return;
-  try {
-    await post('/cache/purge', { targets: ['all'] });
-    await loadCacheStatus();
-    renderCachePanel();
-    if (state.currentSession) renderTargetChips(state.currentSession);
-    notify('Cache purged', 'success', 2000);
-  } catch (e) {
-    notify(`Purge failed: ${e.message}`, 'error');
-  }
-});
-
-/* ─────────────────────────────── Modal close ────────────────────────────── */
-function closeModal() {
-  document.getElementById('modal-overlay').classList.remove('visible');
-}
-document.getElementById('modal-overlay').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('modal-overlay')) closeModal();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeModal();
-});
-
-/* ─────────────────────────────── Keyboard shortcut ─────────────────────── */
-// Ctrl/Cmd+Enter to run analysis
-document.getElementById('query-input').addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-    document.getElementById('run-analysis-btn').click();
-  }
-});
-
-/* ─────────────────────────────── XSS escape helper ─────────────────────── */
-function esc(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;');
-}
-
-/* ─────────────────────────────── Init ──────────────────────────────────── */
-(async function init() {
-  await refreshSessionList();
-  await loadCacheStatus();
-})();
-</script>
-
+<!-- Custom Tooltip for D3 Charts -->
+<div id="d3-tooltip" class="chart-tooltip"></div>
+
+<!-- Application Script -->
+<script src="/js/app.js"></script>
 </body>
 </html>

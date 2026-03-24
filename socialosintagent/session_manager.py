@@ -50,7 +50,7 @@ class Session:
         self.created_at = datetime.now(timezone.utc).isoformat()
         self.updated_at = self.created_at
 
-    def add_query_result(self, query: str, report: str, metadata: Dict[str, Any]) -> str:
+    def add_query_result(self, query: str, report: str, metadata: Dict[str, Any], entities: Dict[str, Any] = None) -> str:
         """
         Appends a completed analysis result to the query history.
 
@@ -58,6 +58,7 @@ class Session:
             query:    The natural language query that was run.
             report:   The markdown report from the LLM.
             metadata: Analysis metadata (targets, models, stats, etc.).
+            entities: Extracted OSINT entities from the analysis.
 
         Returns:
             The query_id of the new history entry.
@@ -68,6 +69,7 @@ class Session:
             "query": query,
             "report": report,
             "metadata": metadata,
+            "entities": entities or {},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         self.query_history.append(entry)

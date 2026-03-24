@@ -89,13 +89,17 @@ class PurgeRequest(BaseModel):
     """Request body for POST /api/v1/cache/purge"""
     targets: List[str] = Field(
         ...,
-        description="Which data types to purge: 'cache', 'media', 'outputs', or 'all'"
+        description="Which data types to purge: 'cache', 'media', 'outputs', 'all', or 'specific'"
+    )
+    keys: Optional[List[str]] = Field(
+        default=None, 
+        description="Specific cache keys to delete e.g. ['twitter_user1']"
     )
 
     @field_validator("targets")
     @classmethod
     def valid_targets(cls, v):
-        allowed = {"cache", "media", "outputs", "all"}
+        allowed = {"cache", "media", "outputs", "all", "specific"}
         for t in v:
             if t not in allowed:
                 raise ValueError(f"Invalid purge target '{t}'. Allowed: {allowed}")
