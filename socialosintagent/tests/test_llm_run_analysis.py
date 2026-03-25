@@ -7,7 +7,7 @@ Covers:
 - Literal {current_timestamp} placeholder is not sent to the API
 - Substituted timestamp matches YYYY-MM-DD HH:MM:SS UTC format
 - User query is wrapped in <user_query> XML tags
-- Collected text data is wrapped in <text_evidence> XML tags
+- Collected text data is wrapped in <evidence> XML tags
 - Security warnings are accumulated when post content contains injection patterns
 - Security Anomalies section is appended to report when warnings are present
 - security_warnings_accumulated is reset between successive run_analysis() calls
@@ -163,7 +163,8 @@ class TestRunAnalysisPromptConstruction:
     ):
         """When warnings are accumulated the report must include a Security Anomalies section."""
         _stub_client(online_analyzer, response_text="Normal analysis output.")
-        report = online_analyzer.run_analysis(injected_platforms_data, "summarise")
+        # run_analysis returns a (report_str, entities_dict) tuple — unpack correctly.
+        report, _entities = online_analyzer.run_analysis(injected_platforms_data, "summarise")
         assert "Security Anomalies" in report
 
     def test_warnings_reset_between_calls(

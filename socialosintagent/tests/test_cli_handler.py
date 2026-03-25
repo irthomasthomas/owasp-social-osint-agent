@@ -5,6 +5,8 @@ Covers:
 _handle_loadmore_command()
   - Specific platform/user target with count updates fetch_options and re-runs last query
   - Non-numeric count is rejected with an error message
+  - Raw command string "/loadmore platform/user count" preserves the slash in the
+    target after lstrip("/") parsing (regression for the replace("/","") bug)
 
 _handle_add_command()
   - Adds a valid new target to the platforms dict
@@ -49,10 +51,6 @@ from socialosintagent.cli_handler import CliHandler
 
 @pytest.fixture
 def mock_agent():
-    # SocialOSINTAgent stores client_manager and cache as instance attributes
-    # assigned in __init__, not defined at class level. create_autospec therefore
-    # cannot see them and raises AttributeError. Use a plain MagicMock and wire
-    # only the attributes the CLI handler actually touches.
     agent = MagicMock()
     agent.client_manager.get_available_platforms.return_value = [
         "bluesky", "github", "hackernews", "mastodon", "reddit", "twitter"
@@ -79,29 +77,78 @@ def _fresh_fetch_options():
 
 # ── _handle_loadmore_command ──────────────────────────────────────────────────
 
-def test_handle_loadmore_command_specific_target(cli):
-    """loadmore <platform/user> <count> updates fetch_options and signals re-run."""
-    parts = ["loadmore", "twitter/testuser", "100"]
-    platforms = {"twitter": ["testuser"]}
-    fetch_options = {"default_count": 50, "targets": {}}
-    should_run, query, force_refresh = cli._handle_loadmore_command(
-        parts, platforms, fetch_options, "find connections"
-    )
-    assert should_run is True
-    assert query == "find connections"
-    assert force_refresh is True
-    # New count = default 50 + 100 added = 150
-    assert fetch_options["targets"]["twitter:testuser"]["count"] == 150
+class TestHandleLoadmoreCommand:
+    def test_handle_loadmore_command_specific_target(self, cli):
+        """loadmore <platform/user> <count> updates fetch_options and signals re-run."""
+        parts = ["loadmore", "twitter/testuser", "100"]
+        platforms = {"twitter": ["testuser"]}
+        fetch_options = {"default_count": 50, "targets": {}}
+        should_run, query, force_refresh = cli._handle_loadmore_command(
+            parts, platforms, fetch_options, "find connections"
+        )
+        assert should_run is True
+        assert query == "find connections"
+        assert force_refresh is True
+        # New count = default 50 + 100 added = 150
+        assert fetch_options["targets"]["twitter:testuser"]["count"] == 150
 
+    def test_handle_loadmore_command_invalid_count(self, cli):
+        """A non-numeric count prints an error and returns should_run=False."""
+        parts = ["loadmore", "twitter/testuser", "invalid"]
+        should_run, query, force_refresh = cli._handle_loadmore_command(
+            parts, {"twitter": ["testuser"]}, {}, ""
+        )
+        assert should_run is False
+        cli.console.print.assert_called_with("[red]Invalid count: 'invalid'.[/red]")
 
-def test_handle_loadmore_command_invalid_count(cli):
-    """A non-numeric count prints an error and returns should_run=False."""
-    parts = ["loadmore", "twitter/testuser", "invalid"]
-    should_run, query, force_refresh = cli._handle_loadmore_command(
-        parts, {"twitter": ["testuser"]}, {}, ""
-    )
-    assert should_run is False
-    cli.console.print.assert_called_with("[red]Invalid count: 'invalid'.[/red]")
+    def test_loadmore_raw_command_string_preserves_slash_in_target(self, cli):
+        """
+        Regression test for the slash-stripping bug in _run_analysis_loop().
+
+        The original caller used `user_input.replace("/", "").split()` which
+        destroyed the separator in "platform/user" targets:
+
+            "/loadmore twitter/alice 50"
+            → replace("/","") → "loadmore twitteralice 50"
+            → split()        → ["loadmore", "twitteralice", "50"]
+
+        _handle_loadmore_command then called target_str.split('/', 1) on
+        "twitteralice", found no slash, and reported the target as not found.
+
+        The fix uses `user_input.lstrip("/").split()` which removes only the
+        leading slash that prefixes the command name:
+
+            "/loadmore twitter/alice 50"
+            → lstrip("/") → "loadmore twitter/alice 50"
+            → split()     → ["loadmore", "twitter/alice", "50"]
+
+        This test simulates what the fixed caller now produces and verifies the
+        method succeeds for a target that contains a slash.
+        """
+        raw_command = "/loadmore twitter/alice 50"
+
+        # Reproduce what the OLD (broken) caller produced — method should FAIL
+        broken_parts = raw_command.replace("/", "").split()
+        # broken_parts == ["loadmore", "twitteralice", "50"]
+        platforms = {"twitter": ["alice"]}
+        fetch_options = {"default_count": 50, "targets": {}}
+        should_run_broken, _, _ = cli._handle_loadmore_command(
+            broken_parts, platforms, fetch_options, "last query"
+        )
+        # With the broken parts the target "twitteralice" is not in the session
+        assert should_run_broken is False
+
+        # Reproduce what the FIXED caller produces — method should SUCCEED
+        fixed_parts = raw_command.lstrip("/").split()
+        # fixed_parts == ["loadmore", "twitter/alice", "50"]
+        fetch_options_2 = {"default_count": 50, "targets": {}}
+        should_run_fixed, query_fixed, refresh_fixed = cli._handle_loadmore_command(
+            fixed_parts, platforms, fetch_options_2, "last query"
+        )
+        assert should_run_fixed is True
+        assert query_fixed == "last query"
+        assert refresh_fixed is True
+        assert fetch_options_2["targets"]["twitter:alice"]["count"] == 100
 
 
 # ── _handle_add_command ───────────────────────────────────────────────────────

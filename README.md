@@ -11,7 +11,7 @@ The agent can be driven through a **web interface** (recommended) or a **command
 
 ✅ **Session Management:** Save and revisit named investigation sessions, each with their own target list, query history, and full report archive.
 
-✅ **Network Contact Discovery:** Automatically extracts and surfaces accounts your targets interact with (mentions, retweets, repo interactions) so you can expand an investigation without manual trawling.
+✅ **Network Contact Discovery:** Automatically extracts and surfaces accounts your targets interact with (mentions, retweets, repo interactions) so you can expand an investigation without manual trawling. Discovered contacts can be dismissed or promoted directly to active targets from the web UI.
 
 ✅ **Multi-Platform Data Collection:** Aggregates data from Twitter/X, Reddit, Bluesky, GitHub, Hacker News, and Mastodon. Captures immutable identifiers (e.g., Bluesky DIDs) to ensure targets can be tracked even if they change their handles.
 
@@ -54,6 +54,89 @@ The agent can be driven through a **web interface** (recommended) or a **command
 ✅ **Programmatic/Batch Mode:** Supports input via JSON from stdin for automated workflows (`--stdin`).
 
 ✅ **Secure Environment Variable Configuration:** All secrets and configurations are managed via a `.env` file.
+
+## 🌐 Web Interface
+
+The web interface provides a full browser-based investigation environment that requires no terminal interaction after startup.
+
+### Starting the web server
+
+```bash
+docker compose up -d web
+```
+
+Then open `http://localhost:8000` in your browser. The image is built automatically on first run.
+
+### Web UI features at a glance
+
+**Sessions panel (left sidebar)**
+- Create named investigation sessions; each has its own target list, query history, and report archive
+- Sessions persist across server restarts — pick up where you left off
+- Rename sessions inline by clicking the title
+- Delete sessions you no longer need
+
+**Target chips bar**
+- Add or remove platforms/usernames at any time using the chip bar above the query input
+- Each chip shows a colour-coded freshness dot (green = fresh cache, amber = stale, grey = not yet fetched)
+- Clicking × on a chip removes that target from the session immediately
+
+**Query bar**
+- Type a natural language query and press **Run Analysis** (or `Ctrl+Enter`)
+- Set the number of posts to fetch per target with the **Posts** counter
+- Toggle **Force refresh** to bypass the 24-hour cache and re-fetch live data
+
+**Live progress stream**
+- Analysis progress streams to the browser in real time via Server-Sent Events
+- Each stage (data fetch → image analysis → LLM synthesis) is logged as it happens
+- If you reload the page mid-analysis the browser reconnects and replays all events so far
+
+**Report panel (centre)**
+- Reports render as styled Markdown with clickable image links
+- Switch between the **Report** tab and the **Timeline** tab at any time
+- **Download MD** saves the current report as a Markdown file
+- The full-session **Export Full Report** button produces a single consolidated Markdown document covering every query in the session, all extracted entities, and the top network contacts
+
+**Query history sidebar**
+- Every query and its full report is preserved in the session
+- Click any history entry to re-display its report without re-running the analysis
+
+**Timeline tab**
+- **Chronological Activity** — bar chart of post volume over calendar time using D3
+- **Pattern of Life** — day-of-week × hour-of-day heatmap (UTC) showing when targets are most active
+
+**Contacts panel (right panel, Contacts tab)**
+- Lists all accounts your targets mention, retweet, reply to, or interact with via repos
+- A force-directed network graph shows the relationships visually
+- Contacts are ranked by interaction weight
+- **+ button** promotes a contact to an active session target in one click
+- **× button** dismisses a contact; it will not reappear on subsequent loads (reversible)
+- Filter contacts by name or platform using the search box
+
+**Entities tab**
+- Extracts and displays structured intelligence selectors from the latest analysis: locations, email addresses, phone numbers, cryptocurrency addresses, and aliases
+
+**Media tab**
+- Shows thumbnails of all images downloaded for the current session's targets
+- Hover over a thumbnail to reveal the LLM vision analysis for that image
+
+**Cache manager**
+- Opened from the top bar **Cache** button
+- Shows every cached target with post count and freshness status
+- Select individual targets to purge, or wipe everything (cache + media + outputs) in one click
+
+### Remote access
+
+The server binds to `127.0.0.1:8000` (localhost only) by default. To access it from another machine, use an SSH tunnel:
+
+```bash
+ssh -L 8000:localhost:8000 user@your-server
+```
+
+Then open `http://localhost:8000` locally.
+
+### Authentication
+
+Set `OSINT_WEB_USER` and `OSINT_WEB_PASSWORD` in your `.env` file to enable HTTP Basic Auth. If these are not set the server runs open — only appropriate for localhost use via SSH tunnel.
 
 ## 🗺️ Visual Workflow: How the Agent Thinks
 
@@ -272,15 +355,6 @@ The web interface provides a full browser-based UI for managing investigation se
 4. **Authentication:**
     Set `OSINT_WEB_USER` and `OSINT_WEB_PASSWORD` in your `.env` file to enable HTTP Basic Auth. If these are not set, the server runs open — only appropriate for localhost use.
 
-#### Web Interface Features
-
-- **Sessions** — Create named investigation sessions, each with their own target list and query history. Sessions persist across server restarts.
-- **Target management** — Add or remove platforms/usernames from a session at any time using the target chip bar or the Manage Targets dialog.
-- **Live progress** — Analysis progress streams to the browser in real time via Server-Sent Events as data is fetched, images are analysed, and the report is synthesised.
-- **Query history** — Every query and its full report is saved to the session. Switch between past results from the history sidebar.
-- **Network contacts** — Discovered accounts your targets interact with are surfaced automatically, with dismiss support to manage the list.
-- **Cache status** — View freshness and post counts for all cached targets, and purge data by type (cache / media / outputs / all).
-
 ### Docker CLI (Interactive)
 
 For terminal-based use, the `agent` service runs the original interactive CLI. It is excluded from `docker compose up` by default (uses the `cli` profile) so it never starts unintentionally alongside the web server.
@@ -394,9 +468,37 @@ Within the analysis session, you can use these commands instead of an analysis q
 
 ## 🤖 AI Analysis Details
 *   **Efficient Architecture:** The agent uses a two-phase process. It first rapidly collects all text data and downloads media from all specified targets. Only after this data gathering is complete does it begin the vision analysis phase.
+*   **Post-Bound Evidence:** Text and image analyses are kept together as atomic evidence units in the LLM prompt. A post saying "going on holiday" paired with a beach photo conveys different intelligence than the same text paired with a military facility — splitting text and vision into separate blocks would lose that binding.
 *   **Externalized Prompts:** All prompts used to guide the LLM are stored in the `socialosintagent/prompts/` directory, allowing for easy customization without changing code.
 *   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt.
 *   **Data Synthesis:** The final analysis is performed by an LLM guided by a detailed system prompt. It synthesizes insights from the user's text, image analyses, and shared domain summary to build a comprehensive profile.
+*   **Intelligence Selectors:** At the end of each analysis the LLM extracts structured selectors (locations, emails, phone numbers, cryptocurrency addresses, aliases) into a dedicated JSON block, which is surfaced separately in the web UI Entities panel.
+
+## 🌐 REST API
+
+The web server exposes a versioned REST API at `/api/v1/` that powers the frontend. The same endpoints are available for programmatic or headless use. Interactive documentation is served at `/api/docs` (Swagger UI) and `/api/redoc`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/platforms` | List configured platforms and their availability |
+| `GET` | `/api/v1/sessions` | List all sessions (summaries) |
+| `POST` | `/api/v1/sessions` | Create a new session |
+| `GET` | `/api/v1/sessions/{id}` | Get full session (includes query history) |
+| `DELETE` | `/api/v1/sessions/{id}` | Delete a session |
+| `PATCH` | `/api/v1/sessions/{id}/rename` | Rename a session |
+| `PUT` | `/api/v1/sessions/{id}/targets` | Replace session targets |
+| `POST` | `/api/v1/sessions/{id}/analyse` | Start an analysis job (returns `job_id`) |
+| `GET` | `/api/v1/jobs/{job_id}` | Poll job status |
+| `GET` | `/api/v1/jobs/{job_id}/stream` | SSE stream of live job progress |
+| `GET` | `/api/v1/sessions/{id}/contacts` | Discovered network contacts |
+| `POST` | `/api/v1/sessions/{id}/contacts/dismiss` | Dismiss a contact |
+| `POST` | `/api/v1/sessions/{id}/contacts/undismiss` | Restore a dismissed contact |
+| `GET` | `/api/v1/sessions/{id}/timeline` | Post timestamps for charting |
+| `GET` | `/api/v1/sessions/{id}/media` | Downloaded media paths and analyses |
+| `GET` | `/api/v1/sessions/{id}/media/file` | Serve a local media file |
+| `GET` | `/api/v1/sessions/{id}/export` | Export full session as JSON |
+| `GET` | `/api/v1/cache` | Cache status (all entries) |
+| `POST` | `/api/v1/cache/purge` | Purge cache/media/outputs |
 
 ## 🛡️ Error Handling & Resilience
 - **Individual Target Failures**: If one user's data can't be fetched (deleted account, rate limit, permissions), analysis continues for other targets

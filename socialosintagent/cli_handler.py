@@ -238,8 +238,12 @@ class CliHandler:
                     # otherwise the loop continues naturally on the next iteration.
 
                 elif input_lower.startswith("/loadmore"):
-                    # Use existing parser but strip the slash first
-                    parts = user_input.replace("/", "").split()
+                    # FIX: Strip only the leading slash character, not ALL slashes in the
+                    # string. The original `user_input.replace("/", "")` destroyed the "/"
+                    # separator in "platform/user" targets (e.g. "twitter/alice" became
+                    # "twitteralice"), causing the subsequent split('/', 1) to fail silently
+                    # and always report the target as not found.
+                    parts = user_input.lstrip("/").split()
                     should_run_analysis, query_to_run, force_refresh = self._handle_loadmore_command(
                         parts, platforms, fetch_options, last_query
                     )
