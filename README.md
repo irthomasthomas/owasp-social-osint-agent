@@ -1,9 +1,29 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/bm-github/owasp-social-osint-agent)](https://github.com/bm-github/owasp-social-osint-agent/releases/latest)
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://bm-github.github.io/owasp-social-osint-agent/socialosintagent-demo.html)
+
 # 🕵️ owasp-social-osint-agent
 
 **OWASP Social OSINT Agent** is an intelligent, autonomous agent designed for open-source intelligence (OSINT) investigations. It leverages both text and vision-capable Large Language Models (LLMs) via any OpenAI-compatible API to autonomously gather, analyze, and synthesize user activity across single or multiple social media platforms. The final output is a structured analytical report that turns scattered public data into coherent, actionable intelligence.
 
 The agent can be driven through a **web interface** (recommended) or a **command-line interface**, both backed by the same engine and sharing the same data cache.
+
+## 🎮 Live Demo
+
+**Try it instantly — no installation required.**
+
+[![OSINT Agent – Interactive Demo](https://img.shields.io/badge/Open%20Interactive%20Demo-%E2%86%92-38bdf8?style=for-the-badge&logo=github)](https://bm-github.github.io/owasp-social-osint-agent/socialosintagent-demo.html)
+
+The [interactive demo](https://bm-github.github.io/owasp-social-osint-agent/socialosintagent-demo.html) runs entirely in your browser with pre-loaded investigation data — no backend, no API keys, no Docker required. It showcases the full web UI including:
+
+- **Session management** with two pre-loaded example investigations
+- **Analysis reports** rendered from realistic mock OSINT data
+- **Network contact graph** (D3 force-directed) showing target relationships
+- **Chronological activity chart** and **Pattern of Life heatmap** (day × hour)
+- **Entity extraction** panel (locations, emails, crypto addresses, aliases)
+- **Media analysis** thumbnails with simulated vision-LLM annotations
+- **Live progress stream** simulation — run your own queries against the demo data
+
+> The demo uses pre-canned data to illustrate the interface. The real system performs live API fetching, LLM synthesis, vision analysis, and prompt-injection-hardened processing against actual social platforms.
 
 ## 🌟 Key Features
 
@@ -58,6 +78,8 @@ The agent can be driven through a **web interface** (recommended) or a **command
 ## 🌐 Web Interface
 
 The web interface provides a full browser-based investigation environment that requires no terminal interaction after startup.
+
+> **Want to see it before installing?** Check out the [interactive demo](https://bm-github.github.io/owasp-social-osint-agent/socialosintagent-demo.html) — it runs in your browser with no setup required.
 
 ### Starting the web server
 
