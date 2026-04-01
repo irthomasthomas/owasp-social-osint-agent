@@ -11,7 +11,7 @@ const state = {
   contacts: [],
   contactsDismissed: [],
   contactsFilter: '',
-  theme: 'auto', // 'auto' | 'light' | 'dark'
+  theme: 'auto',
 };
 
 /* ── API ──────────────────────────────────────────────────────────────────── */
@@ -62,6 +62,66 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
   applyTheme(isDark ? 'light' : 'dark');
 });
 
+/* ── Mobile drawer helpers ────────────────────────────────────────────────── */
+function isMobile() { return window.innerWidth <= 768; }
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+  document.getElementById('mob-sessions').classList.remove('active');
+}
+function openSidebar() {
+  closeHistory(); closeRightPanel();
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebar-overlay').classList.add('visible');
+  document.getElementById('mob-sessions').classList.add('active');
+}
+function toggleSidebar() {
+  if (document.getElementById('sidebar').classList.contains('open')) closeSidebar();
+  else openSidebar();
+}
+
+function closeHistory() {
+  document.getElementById('history-sidebar').classList.remove('open');
+  document.getElementById('history-overlay').classList.remove('visible');
+  document.getElementById('mob-history').classList.remove('active');
+}
+function openHistory() {
+  closeSidebar(); closeRightPanel();
+  document.getElementById('history-sidebar').classList.add('open');
+  document.getElementById('history-overlay').classList.add('visible');
+  document.getElementById('mob-history').classList.add('active');
+}
+function toggleHistory() {
+  if (document.getElementById('history-sidebar').classList.contains('open')) closeHistory();
+  else openHistory();
+}
+
+function closeRightPanel() {
+  document.getElementById('right-panel').classList.remove('open');
+  document.getElementById('right-panel-overlay').classList.remove('visible');
+  document.getElementById('mob-contacts').classList.remove('active');
+}
+function openRightPanel() {
+  closeSidebar(); closeHistory();
+  document.getElementById('right-panel').classList.add('open');
+  document.getElementById('right-panel-overlay').classList.add('visible');
+  document.getElementById('mob-contacts').classList.add('active');
+}
+function toggleRightPanel() {
+  if (document.getElementById('right-panel').classList.contains('open')) closeRightPanel();
+  else openRightPanel();
+}
+
+/* Close drawers on resize to desktop */
+window.addEventListener('resize', () => {
+  if (!isMobile()) {
+    closeSidebar();
+    closeHistory();
+    closeRightPanel();
+  }
+});
+
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
@@ -88,7 +148,7 @@ function renderSessionList() {
   }
   list.innerHTML = state.sessions.map(s => `
     <div class="session-item ${state.currentSession?.session_id === s.session_id ? 'active' : ''}"
-         onclick="loadSession('${s.session_id}')">
+         onclick="loadSession('${s.session_id}');if(isMobile())closeSidebar();">
       <div class="session-item-icon">🔍</div>
       <div class="session-info">
         <div class="session-name">${esc(s.name)}</div>
@@ -115,7 +175,7 @@ async function loadSession(id) {
     state.activeQueryId = null;
     showSessionWorkspace(session);
     renderSessionList();
-    await loadCacheStatus(); // Also refreshes target chip status
+    await loadCacheStatus();
     await loadContacts();
     await loadMedia();
     await loadTimeline();
@@ -127,9 +187,7 @@ function showSessionWorkspace(session) {
   const ws = document.getElementById('session-workspace');
   ws.classList.add('visible');
   document.getElementById('session-title').textContent = session.name;
-  
-  // Need to ensure target chips render with correct cache state if available
-  renderTargetChips(session); 
+  renderTargetChips(session);
   renderHistory(session);
 
   if (session.query_history?.length) {
@@ -138,40 +196,31 @@ function showSessionWorkspace(session) {
     state.activeQueryId = latest.query_id;
     renderHistory(session);
   } else {
-    // If there is no history, completely wipe the UI so ghost data doesn't bleed over
     clearWorkspace();
   }
 }
 
 function hideAllViews() {
   document.getElementById('progress-view').classList.remove('visible');
-  document.getElementById('report-view').classList.remove('visible'); // FIX: previously .remove('active')
+  document.getElementById('report-view').classList.remove('visible');
   document.getElementById('timeline-view').classList.remove('visible');
-  
-  // Select Report tab as active by default visually
   document.querySelectorAll('[data-center-tab]').forEach(b => b.classList.remove('active'));
   document.querySelector('[data-center-tab="report"]').classList.add('active');
 }
 
 function clearWorkspace() {
   hideAllViews();
-  // Show report view but with empty state
   document.getElementById('report-view').classList.add('visible');
-  
   document.getElementById('report-content').innerHTML = `
     <div style="text-align:center; padding: 60px 20px; color: var(--text-tertiary);">
-      <svg style="width:48px;height:48px;margin-bottom:12px;opacity:0.5;stroke:currentColor;" viewBox="0 0 24 24" fill="none" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M16.5 16.5L21 21"/></svg>
+      <svg style="width:48px;height:48px;margin-bottom:12px;opacity:0.4;stroke:currentColor;" viewBox="0 0 24 24" fill="none" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M16.5 16.5L21 21"/></svg>
       <h3 style="font-family:var(--font-display);font-size:16px;color:var(--text-secondary);margin-bottom:8px;">No Analysis Run Yet</h3>
       <p style="font-size:12px;">Enter a query in the bar above to start extracting intelligence.</p>
     </div>
   `;
   document.getElementById('report-query-label-text').textContent = 'None';
-  
-  // Clear timeline
   document.getElementById('heatmap-container').innerHTML = '<div class="timeline-empty">Run an analysis to generate the pattern of life heatmap.</div>';
   document.getElementById('chronological-container').innerHTML = '<div class="timeline-empty">Run an analysis to generate the historical timeline.</div>';
-  
-  // Clear Right Panel
   document.getElementById('contacts-list').innerHTML = `
     <div class="contacts-empty" id="contacts-empty">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -179,11 +228,10 @@ function clearWorkspace() {
     </div>`;
   const badge = document.getElementById('contacts-badge');
   if (badge) badge.style.display = 'none';
-  
+  const mobBadge = document.getElementById('mob-contacts-badge');
+  if (mobBadge) mobBadge.classList.remove('visible');
   document.getElementById('graph-empty').style.display = 'flex';
-  const container = document.getElementById('graph-container');
-  container.querySelectorAll('svg.network-graph').forEach(s => s.remove());
-  
+  document.getElementById('graph-container').querySelectorAll('svg.network-graph').forEach(s => s.remove());
   document.getElementById('entities-content').innerHTML = '<div style="color:var(--text-tertiary);text-align:center;padding:32px 16px;font-size:11px;">Run an analysis to extract selectors.</div>';
   document.getElementById('media-grid-content').innerHTML = '<div style="grid-column:1/-1;color:var(--text-tertiary);text-align:center;padding:32px 16px;font-size:11px;">No media files downloaded yet.</div>';
 }
@@ -192,6 +240,10 @@ function setQueryBarDisabled(disabled) {
   document.getElementById('query-input').disabled = disabled;
   document.getElementById('fetch-count-input').disabled = disabled;
   document.getElementById('force-refresh-check').disabled = disabled;
+  document.getElementById('run-analysis-btn').disabled = disabled;
+  // Also update mobile run button appearance
+  const mobRun = document.getElementById('mob-run');
+  if (mobRun) mobRun.style.opacity = disabled ? '0.42' : '';
 }
 
 /* ── Target Chips ─────────────────────────────────────────────────────────── */
@@ -249,8 +301,6 @@ document.getElementById('add-target-form').addEventListener('submit', async () =
     await apiPut(`/sessions/${s.session_id}/targets`, { platforms: updated });
     s.platforms = updated;
     document.getElementById('add-username-input').value = '';
-    
-    // Refresh cache state so the new chip shows accurate color
     await loadCacheStatus();
     renderTargetChips(s);
     notify(`Added ${platform}/${username}`, 'success', 2000);
@@ -267,7 +317,7 @@ function renderHistory(session) {
   }
   list.innerHTML = [...history].reverse().map(e => `
     <div class="history-item ${state.activeQueryId === e.query_id ? 'active' : ''}"
-         onclick="showHistoryEntry('${e.query_id}')">
+         onclick="showHistoryEntry('${e.query_id}');if(isMobile())closeHistory();">
       <div class="history-query">${esc(e.query)}</div>
       <div class="history-ts">${fmtDate(e.timestamp)}</div>
     </div>
@@ -286,19 +336,13 @@ function showHistoryEntry(qid) {
 
 /* ── Report & Entities ────────────────────────────────────────────────────── */
 function showReport(entry) {
-  // Hide progress, ensure report tab is visible
   document.getElementById('progress-view').classList.remove('visible');
-  
-  // Automatically switch to report tab if we were watching progress
   document.querySelectorAll('[data-center-tab]').forEach(b => b.classList.remove('active'));
   document.querySelector('[data-center-tab="report"]').classList.add('active');
   document.getElementById('timeline-view').classList.remove('visible');
   document.getElementById('report-view').classList.add('visible');
-
   document.getElementById('report-query-label-text').textContent = entry.query;
   document.getElementById('report-content').innerHTML = marked.parse(entry.report || '*(no content)*');
-
-  // Render entities to the right panel
   renderEntities(entry.entities);
 }
 
@@ -308,20 +352,16 @@ function renderEntities(entities) {
     container.innerHTML = '<div style="color:var(--text-tertiary);text-align:center;padding:32px 16px;font-size:11px;">No entities extracted for this query.</div>';
     return;
   }
-  
   let html = '';
   let foundAny = false;
   for (const [type, arr] of Object.entries(entities)) {
     if (arr && arr.length > 0) {
       foundAny = true;
       html += `<div class="entity-group"><div class="entity-title">${esc(type)}</div>`;
-      arr.forEach(val => {
-        html += `<div class="entity-pill">${esc(val)}</div>`;
-      });
+      arr.forEach(val => { html += `<div class="entity-pill">${esc(val)}</div>`; });
       html += `</div>`;
     }
   }
-
   container.innerHTML = foundAny ? html : '<div style="color:var(--text-tertiary);text-align:center;padding:32px 16px;font-size:11px;">No entities extracted for this query.</div>';
 }
 
@@ -331,20 +371,16 @@ document.getElementById('btn-copy-report').addEventListener('click', () => {
   navigator.clipboard.writeText(entry.report || '').then(() => notify('Copied', 'success', 2000));
 });
 
-// Download MD Client-Side
 document.getElementById('btn-download-md').addEventListener('click', () => {
   const entry = state.currentSession?.query_history?.find(e => e.query_id === state.activeQueryId);
   if (!entry || !state.currentSession) return;
-  
   const blob = new Blob([entry.report || ''], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  
   const safeName = state.currentSession.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   const dateStr = new Date().toISOString().split('T')[0];
   a.download = `osint_report_${safeName}_${dateStr}.md`;
-  
   a.click();
   URL.revokeObjectURL(url);
   notify('Markdown downloaded', 'success', 2000);
@@ -353,11 +389,14 @@ document.getElementById('btn-download-md').addEventListener('click', () => {
 /* ── Analysis ─────────────────────────────────────────────────────────────── */
 document.getElementById('run-analysis-btn').addEventListener('click', async () => {
   const session = state.currentSession;
-  if (!session) return;
+  if (!session) { notify('Select or create a session first', 'info'); return; }
   const query = document.getElementById('query-input').value.trim();
   if (!query) { notify('Enter an analysis query', 'info'); document.getElementById('query-input').focus(); return; }
   const forceRefresh = document.getElementById('force-refresh-check').checked;
   const fetchCount = parseInt(document.getElementById('fetch-count-input').value) || 50;
+
+  // Close mobile drawers so user can see progress
+  if (isMobile()) { closeSidebar(); closeHistory(); closeRightPanel(); }
 
   try {
     const fetchOptions = { default_count: fetchCount, targets: session.fetch_options?.targets || {} };
@@ -373,22 +412,16 @@ document.getElementById('run-analysis-btn').addEventListener('click', async () =
 
 function startProgressView(jobId, query) {
   state.runningJobId = jobId;
-  
-  // Disable query inputs
-  document.getElementById('run-analysis-btn').disabled = true;
   setQueryBarDisabled(true);
-  
-  setStatus('running', 'Running analysis…');
-  
-  // Show progress view in center panel
+  setStatus('running', 'Running…');
+
   document.querySelectorAll('[data-center-tab]').forEach(b => b.classList.remove('active'));
   document.querySelector('[data-center-tab="report"]').classList.add('active');
   document.getElementById('report-view').classList.remove('visible');
   document.getElementById('timeline-view').classList.remove('visible');
-  
+
   const pv = document.getElementById('progress-view');
   pv.classList.add('visible');
-  
   document.getElementById('progress-stage-label').textContent = 'Starting…';
   document.getElementById('progress-log').innerHTML = '';
   appendLog('info', `Query: ${query}`);
@@ -396,7 +429,6 @@ function startProgressView(jobId, query) {
   if (state.sseSource) state.sseSource.close();
   const es = new EventSource(`${API}/jobs/${jobId}/stream`);
   state.sseSource = es;
-
   ['stage','log','status','complete','error'].forEach(t => {
     es.addEventListener(t, e => {
       try { handleJobEvent(t, JSON.parse(e.data), jobId); } catch {}
@@ -417,7 +449,6 @@ function handleJobEvent(type, data, jobId) {
   } else if (type === 'error') {
     appendLog('error', `✗ ${data.message}`);
     setStatus('error', 'Error');
-    document.getElementById('run-analysis-btn').disabled = false;
     setQueryBarDisabled(false);
     notify(`Analysis error: ${data.message}`, 'error', 6000);
   }
@@ -435,11 +466,7 @@ function appendLog(cls, msg) {
 
 async function finishAnalysis(jobId) {
   if (state.sseSource) { state.sseSource.close(); state.sseSource = null; }
-  
-  // Re-enable inputs
-  document.getElementById('run-analysis-btn').disabled = false;
   setQueryBarDisabled(false);
-  
   document.getElementById('force-refresh-check').checked = false;
   setStatus('', 'Ready');
 
@@ -454,8 +481,6 @@ async function finishAnalysis(jobId) {
       renderHistory(session);
       showReport(latest);
     }
-    
-    // Refresh background data
     await loadCacheStatus();
     renderTargetChips(session);
     await loadContacts();
@@ -471,7 +496,6 @@ async function pollJob(jobId) {
       if (job.status === 'complete') { finishAnalysis(jobId); return; }
       if (job.status === 'error') {
         notify(`Analysis failed: ${job.error}`, 'error', 6000);
-        document.getElementById('run-analysis-btn').disabled = false;
         setQueryBarDisabled(false);
         setStatus('error', 'Error');
         return;
@@ -530,54 +554,47 @@ document.getElementById('btn-export-session').addEventListener('click', () => {
   const s = state.currentSession;
   if (!s) return;
 
-  // 1. Build Header
   let md = `# OSINT Investigation Report: ${s.name}\n`;
   md += `**Date:** ${new Date().toLocaleString()}\n`;
   md += `**Session ID:** \`${s.session_id}\`\n\n`;
 
-  // 2. Targets Section
   md += `## Investigation Targets\n`;
   for (const [platform, users] of Object.entries(s.platforms || {})) {
     md += `- **${platform.toUpperCase()}:** ${users.join(', ')}\n`;
   }
   md += `\n---\n\n`;
 
-  // 3. Analysis History
   md += `## Analysis History\n\n`;
   if (s.query_history && s.query_history.length > 0) {
     s.query_history.forEach((entry, idx) => {
       md += `### Query ${idx + 1}: ${entry.query}\n`;
       md += `*Timestamp: ${new Date(entry.timestamp).toLocaleString()}*\n\n`;
-      md += `${entry.report}\n\n`;
-      md += `--- \n\n`;
+      md += `${entry.report}\n\n--- \n\n`;
     });
   } else {
     md += `*No analysis queries recorded in this session.*\n\n`;
   }
 
-  // 4. Consolidated Entities
   md += `## Consolidated Intelligence Selectors\n\n`;
   const allEntities = { locations: new Set(), emails: new Set(), phones: new Set(), crypto: new Set(), aliases: new Set() };
   s.query_history.forEach(entry => {
-      if (entry.entities) {
-          Object.keys(allEntities).forEach(key => {
-              if (entry.entities[key]) entry.entities[key].forEach(val => allEntities[key].add(val));
-          });
-      }
+    if (entry.entities) {
+      Object.keys(allEntities).forEach(key => {
+        if (entry.entities[key]) entry.entities[key].forEach(val => allEntities[key].add(val));
+      });
+    }
   });
-
   let hasEntities = false;
   Object.keys(allEntities).forEach(key => {
-      if (allEntities[key].size > 0) {
-          hasEntities = true;
-          md += `### ${key.toUpperCase()}\n`;
-          allEntities[key].forEach(val => md += `- \`${val}\` \n`);
-          md += `\n`;
-      }
+    if (allEntities[key].size > 0) {
+      hasEntities = true;
+      md += `### ${key.toUpperCase()}\n`;
+      allEntities[key].forEach(val => md += `- \`${val}\` \n`);
+      md += `\n`;
+    }
   });
   if (!hasEntities) md += `*No specific selectors extracted.*\n\n`;
 
-  // 5. Network Contacts
   md += `## Discovered Network Connections\n\n`;
   if (state.contacts && state.contacts.length > 0) {
     md += `| Platform | Username | Interaction Weight | Types |\n`;
@@ -589,16 +606,13 @@ document.getElementById('btn-export-session').addEventListener('click', () => {
     md += `*No network contacts extracted.*\n`;
   }
 
-  // 6. Trigger Download
   const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  
   const safeName = s.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   a.download = `OSINT_REPORT_${safeName}.md`;
   a.click();
-  
   URL.revokeObjectURL(url);
   notify('Full Investigation Report Exported (MD)', 'success');
 });
@@ -614,11 +628,15 @@ async function loadContacts() {
     renderContacts();
     renderGraph();
     const badge = document.getElementById('contacts-badge');
+    const mobBadge = document.getElementById('mob-contacts-badge');
     if (state.contacts.length) {
       badge.textContent = state.contacts.length;
       badge.style.display = '';
+      mobBadge.textContent = state.contacts.length;
+      mobBadge.classList.add('visible');
     } else {
       badge.style.display = 'none';
+      mobBadge.classList.remove('visible');
     }
   } catch (e) {
     state.contacts = [];
@@ -634,7 +652,6 @@ document.getElementById('contacts-search').addEventListener('input', e => {
 
 function renderContacts() {
   const list = document.getElementById('contacts-list');
-
   let contacts = state.contacts;
   if (state.contactsFilter) {
     contacts = contacts.filter(c =>
@@ -642,8 +659,6 @@ function renderContacts() {
       c.platform.toLowerCase().includes(state.contactsFilter)
     );
   }
-
-  // Inject the empty state directly if there are no contacts
   if (!contacts.length) {
     list.innerHTML = `
       <div class="contacts-empty" id="contacts-empty">
@@ -653,16 +668,13 @@ function renderContacts() {
     `;
     return;
   }
-
   const maxWeight = Math.max(...contacts.map(c => c.weight), 1);
-
   list.innerHTML = contacts.map(c => {
     const barW = Math.max(8, Math.round((c.weight / maxWeight) * 100));
     const initials = c.username.slice(0, 2).toUpperCase();
     const itypePills = (c.interaction_types || []).map(t =>
       `<span class="itype-pill ${t}">${esc(t.replace('_',' '))}</span>`
     ).join('');
-
     return `
       <div class="contact-row" data-username="${esc(c.username)}" data-platform="${esc(c.platform)}">
         <div class="contact-avatar">${esc(initials)}</div>
@@ -674,9 +686,7 @@ function renderContacts() {
           </div>
         </div>
         <div class="contact-weight">
-          <div class="weight-bar-wrap">
-            <div class="weight-bar" style="width:${barW}%"></div>
-          </div>
+          <div class="weight-bar-wrap"><div class="weight-bar" style="width:${barW}%"></div></div>
           <span class="weight-num">${c.weight}</span>
         </div>
         <div class="contact-actions">
@@ -714,7 +724,7 @@ async function addContactToSession(platform, username) {
   try {
     await apiPut(`/sessions/${s.session_id}/targets`, { platforms: updated, fetch_options: s.fetch_options });
     s.platforms = updated;
-    await loadCacheStatus(); // update UI cache states
+    await loadCacheStatus();
     renderTargetChips(s);
     notify(`Added ${platform}/${username} to session`, 'success', 2500);
   } catch (e) { notify(`Failed: ${e.message}`, 'error'); }
@@ -724,65 +734,42 @@ async function addContactToSession(platform, username) {
 function renderGraph() {
   const container = document.getElementById('graph-container');
   const emptyMsg = document.getElementById('graph-empty');
-  
   container.querySelectorAll('svg.network-graph').forEach(s => s.remove());
 
-  const contacts = state.contacts.slice(0, 40); // Cap for performance
+  const contacts = state.contacts.slice(0, 40);
   const session = state.currentSession;
-
-  if (!contacts.length || !session) {
-    emptyMsg.style.display = 'flex';
-    return;
-  }
+  if (!contacts.length || !session) { emptyMsg.style.display = 'flex'; return; }
   emptyMsg.style.display = 'none';
 
   const W = container.clientWidth || 300;
-  const H = 220;
+  const H = 200;
 
-  // Build nodes: source targets + top contacts
   const sourceNodes = [];
   for (const [platform, users] of Object.entries(session.platforms || {})) {
     for (const u of users) sourceNodes.push({ id: `${platform}/${u}`, label: u, type: 'source' });
   }
-
-  const contactNodes = contacts.map(c => ({
-    id: `${c.platform}/${c.username}`,
-    label: c.username,
-    type: 'contact',
-    weight: c.weight,
-  }));
-
-  // Deduplicate
+  const contactNodes = contacts.map(c => ({ id: `${c.platform}/${c.username}`, label: c.username, type: 'contact', weight: c.weight }));
   const allIds = new Set(sourceNodes.map(n => n.id));
   const filteredContacts = contactNodes.filter(n => !allIds.has(n.id));
   const nodes = [...sourceNodes, ...filteredContacts];
 
-  // Edges: source -> contact (based on contacts data)
   const links = [];
   contacts.forEach(c => {
     const cId = `${c.platform}/${c.username}`;
     sourceNodes.forEach(s => {
-      if (s.id.split('/')[0] === c.platform) {
-        links.push({ source: s.id, target: cId, weight: c.weight });
-      }
+      if (s.id.split('/')[0] === c.platform) links.push({ source: s.id, target: cId, weight: c.weight });
     });
   });
-
   const validIds = new Set(nodes.map(n => n.id));
   const validLinks = links.filter(l => validIds.has(l.source) && validIds.has(l.target));
 
-  const svg = d3.select(container).append('svg')
-    .attr('class', 'network-graph')
-    .attr('width', W)
-    .attr('height', H);
-
+  const svg = d3.select(container).append('svg').attr('class', 'network-graph').attr('width', W).attr('height', H);
   const cssVars = getComputedStyle(document.documentElement);
   const accentColor   = cssVars.getPropertyValue('--accent').trim();
   const borderMedium  = cssVars.getPropertyValue('--border-medium').trim();
   const bgRaised      = cssVars.getPropertyValue('--bg-raised').trim();
   const bgSurface     = cssVars.getPropertyValue('--bg-surface').trim();
   const textSecondary = cssVars.getPropertyValue('--text-secondary').trim();
-
   const maxW = Math.max(...contacts.map(c => c.weight), 1);
 
   const sim = d3.forceSimulation(nodes)
@@ -791,13 +778,11 @@ function renderGraph() {
     .force('center', d3.forceCenter(W / 2, H / 2))
     .force('collision', d3.forceCollide(16));
 
-  const link = svg.append('g').selectAll('line')
-    .data(validLinks).join('line')
+  const link = svg.append('g').selectAll('line').data(validLinks).join('line')
     .attr('class', 'graph-link')
     .style('stroke-width', d => 0.6 + (d.weight / maxW) * 1.8);
 
-  const node = svg.append('g').selectAll('g')
-    .data(nodes).join('g')
+  const node = svg.append('g').selectAll('g').data(nodes).join('g')
     .attr('class', d => d.type === 'source' ? 'node-source' : 'node-contact')
     .call(d3.drag()
       .on('start', (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
@@ -811,19 +796,15 @@ function renderGraph() {
     .style('stroke', d => d.type === 'source' ? bgSurface : borderMedium)
     .style('stroke-width', d => d.type === 'source' ? '2.5px' : '1.5px');
 
-  node.append('text')
-    .attr('class', 'node-label')
-    .attr('dy', d => -(( d.type === 'source' ? 9 : 8) + 3))
+  node.append('text').attr('class', 'node-label')
+    .attr('dy', d => -((d.type === 'source' ? 9 : 8) + 3))
     .attr('text-anchor', 'middle')
     .style('fill', textSecondary)
     .text(d => d.label.length > 12 ? d.label.slice(0,11) + '…' : d.label);
 
   sim.on('tick', () => {
-    link
-      .attr('x1', d => d.source.x)
-      .attr('y1', d => d.source.y)
-      .attr('x2', d => d.target.x)
-      .attr('y2', d => d.target.y);
+    link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
     node.attr('transform', d => `translate(${Math.max(14,Math.min(W-14,d.x))},${Math.max(14,Math.min(H-14,d.y))})`);
   });
 }
@@ -834,7 +815,6 @@ async function loadTimeline() {
   if (!s) return;
   const chronoContainer = document.getElementById('chronological-container');
   const heatmapContainer = document.getElementById('heatmap-container');
-  
   try {
     const res = await apiGet(`/sessions/${s.session_id}/timeline`);
     if (!res.events || !res.events.length) {
@@ -842,10 +822,8 @@ async function loadTimeline() {
       heatmapContainer.innerHTML = '<div class="timeline-empty">No timestamp data found. Run an analysis.</div>';
       return;
     }
-
     renderChronologicalChart(res.events, chronoContainer);
     renderHeatmap(res.events, heatmapContainer);
-
   } catch (e) {
     chronoContainer.innerHTML = `<div style="color:var(--red);font-size:11px;">Error loading timeline: ${esc(e.message)}</div>`;
     heatmapContainer.innerHTML = '';
@@ -854,19 +832,13 @@ async function loadTimeline() {
 
 function renderChronologicalChart(events, container) {
   container.innerHTML = '';
-  
-  // Parse dates and group by YYYY-MM-DD
-  const parseDate = d3.timeParse("%Y-%m-%dT%H:%M:%S.%LZ");
   const formatDate = d3.timeFormat("%Y-%m-%d");
-  
   const dailyCounts = {};
   events.forEach(e => {
-    // Basic fix for string formats
     const dt = new Date(e.timestamp);
     const dayStr = formatDate(dt);
     dailyCounts[dayStr] = (dailyCounts[dayStr] || 0) + 1;
   });
-
   const data = Object.keys(dailyCounts).map(d => ({
     date: d3.timeParse("%Y-%m-%d")(d),
     count: dailyCounts[d]
@@ -874,84 +846,55 @@ function renderChronologicalChart(events, container) {
 
   const containerWidth = container.clientWidth || 600;
   const height = 180;
-  const margin = {top: 10, right: 20, bottom: 20, left: 30};
+  const margin = {top: 10, right: 16, bottom: 22, left: 30};
   const width = containerWidth - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
 
   const svg = d3.select(container).append("svg")
-      .attr("width", containerWidth)
-      .attr("height", height)
-    .append("g")
-      .attr("transform", `translate(${margin.left},${margin.top})`);
+    .attr("width", containerWidth).attr("height", height)
+    .append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-  // X scale
-  const x = d3.scaleTime()
-    .domain(d3.extent(data, d => d.date))
-    .range([0, width]);
+  const x = d3.scaleTime().domain(d3.extent(data, d => d.date)).range([0, width]);
+  const y = d3.scaleLinear().domain([0, d3.max(data, d => d.count)]).range([innerHeight, 0]);
 
-  // Y scale
-  const y = d3.scaleLinear()
-    .domain([0, d3.max(data, d => d.count)])
-    .range([innerHeight, 0]);
+  svg.append("g").attr("class", "axis").attr("transform", `translate(0,${innerHeight})`).call(d3.axisBottom(x).ticks(5));
+  svg.append("g").attr("class", "axis").call(d3.axisLeft(y).ticks(4).tickFormat(d3.format("d")));
 
-  // Axes
-  svg.append("g")
-    .attr("class", "axis")
-    .attr("transform", `translate(0,${innerHeight})`)
-    .call(d3.axisBottom(x).ticks(6));
-
-  svg.append("g")
-    .attr("class", "axis")
-    .call(d3.axisLeft(y).ticks(4).tickFormat(d3.format("d")));
-
-  // Tooltip
   const tooltip = d3.select("#d3-tooltip");
-
-  // Bars
   const barWidth = Math.max(2, width / data.length - 1);
-  
-  svg.selectAll(".bar")
-    .data(data)
-    .enter().append("rect")
-      .attr("class", "bar")
-      .attr("x", d => x(d.date) - barWidth/2)
-      .attr("y", d => y(d.count))
-      .attr("width", barWidth)
-      .attr("height", d => innerHeight - y(d.count))
-      .on("mouseover", (event, d) => {
-         tooltip.transition().duration(100).style("opacity", 1);
-         tooltip.html(`<strong>${formatDate(d.date)}</strong><br/>${d.count} posts`)
-           .style("left", (event.pageX - 30) + "px")
-           .style("top", (event.pageY - 40) + "px");
-      })
-      .on("mouseout", () => {
-         tooltip.transition().duration(200).style("opacity", 0);
-      });
+
+  svg.selectAll(".bar").data(data).enter().append("rect")
+    .attr("class", "bar")
+    .attr("x", d => x(d.date) - barWidth/2)
+    .attr("y", d => y(d.count))
+    .attr("width", barWidth)
+    .attr("height", d => innerHeight - y(d.count))
+    .on("mouseover", (event, d) => {
+      tooltip.transition().duration(100).style("opacity", 1);
+      tooltip.html(`<strong>${formatDate(d.date)}</strong><br/>${d.count} posts`)
+        .style("left", (event.clientX - 30) + "px")
+        .style("top", (event.clientY - 44) + "px");
+    })
+    .on("mouseout", () => { tooltip.transition().duration(200).style("opacity", 0); });
 }
 
 function renderHeatmap(events, container) {
-  // Initialize 7 days x 24 hours matrix
   const matrix = Array.from({length: 7}, () => Array(24).fill(0));
   let max = 1;
-  
   events.forEach(e => {
     const dt = new Date(e.timestamp);
-    // getDay() is 0 (Sun) to 6 (Sat)
     matrix[dt.getUTCDay()][dt.getUTCHours()]++;
-    if(matrix[dt.getUTCDay()][dt.getUTCHours()] > max) max = matrix[dt.getUTCDay()][dt.getUTCHours()];
+    if (matrix[dt.getUTCDay()][dt.getUTCHours()] > max) max = matrix[dt.getUTCDay()][dt.getUTCHours()];
   });
-
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   let html = `<div class="heatmap-grid">`;
-  // Header row for hours
   html += `<div style="grid-column: 2 / 26; display:flex; justify-content:space-between; font-size:9px; color:var(--text-tertiary); margin-bottom:4px;"><span>00:00 UTC</span><span>12:00</span><span>23:00</span></div>`;
-  
-  for(let d=0; d<7; d++) {
+  for (let d=0; d<7; d++) {
     html += `<div class="heatmap-label">${days[d]}</div>`;
-    for(let h=0; h<24; h++) {
+    for (let h=0; h<24; h++) {
       const val = matrix[d][h];
-      const opacity = val === 0 ? 0.05 : Math.max(0.2, val / max); 
-      html += `<div class="heatmap-cell" style="background: rgba(37,99,235, ${opacity})" title="${days[d]} ${String(h).padStart(2,'0')}:00 UTC&#10;${val} posts"></div>`;
+      const opacity = val === 0 ? 0.05 : Math.max(0.18, val / max);
+      html += `<div class="heatmap-cell" style="background: rgba(29,86,216, ${opacity})" title="${days[d]} ${String(h).padStart(2,'0')}:00 UTC&#10;${val} posts"></div>`;
     }
   }
   html += `</div>`;
@@ -963,14 +906,12 @@ async function loadMedia() {
   const s = state.currentSession;
   if (!s) return;
   const container = document.getElementById('media-grid-content');
-  
   try {
     const res = await apiGet(`/sessions/${s.session_id}/media`);
     if (!res.media || !res.media.length) {
       container.innerHTML = '<div style="grid-column:1/-1;color:var(--text-tertiary);text-align:center;padding:32px 16px;font-size:11px;">No local media files downloaded.</div>';
       return;
     }
-
     container.innerHTML = res.media.map(m => {
       const imgUrl = `/api/v1/sessions/${s.session_id}/media/file?path=${encodeURIComponent(m.path)}`;
       return `
@@ -982,13 +923,12 @@ async function loadMedia() {
         </div>
       `;
     }).join('');
-    
   } catch (e) {
     container.innerHTML = `<div style="grid-column:1/-1;color:var(--red);font-size:11px;">Error loading media: ${esc(e.message)}</div>`;
   }
 }
 
-/* ── Cache Modal (Top Level) ──────────────────────────────────────────────── */
+/* ── Cache Modal ──────────────────────────────────────────────────────────── */
 async function loadCacheStatus() {
   try {
     const data = await apiGet('/cache');
@@ -1003,56 +943,51 @@ document.getElementById('btn-cache-mgr').addEventListener('click', async () => {
 
 function openCacheModal() {
   const modal = document.getElementById('modal');
-  
   function render() {
     const entries = state.cacheEntries;
-    
     modal.innerHTML = `
       <div class="modal-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
         Cache Manager
       </div>
-      <div style="font-size:12px; color:var(--text-secondary); margin-bottom:16px;">
-        View and selectively purge cached JSON responses. Media files and PDF reports are purged via 'Purge All'.
+      <div style="font-size:12px; color:var(--text-secondary); margin-bottom:14px;">
+        View and selectively purge cached JSON responses.
       </div>
-      <div style="max-height:300px; overflow-y:auto; border:1px solid var(--border-subtle); border-radius:var(--radius-sm); margin-bottom:16px;">
+      <div style="max-height:280px; overflow-y:auto; border:1px solid var(--border-subtle); border-radius:var(--radius-sm); margin-bottom:14px; -webkit-overflow-scrolling:touch;">
         <table style="width:100%; border-collapse:collapse;">
           <thead style="background:var(--bg-raised); position:sticky; top:0;">
             <tr>
-              <th style="padding:8px; text-align:left; border-bottom:1px solid var(--border-subtle);"><input type="checkbox" id="cache-select-all"></th>
-              <th style="padding:8px; text-align:left; border-bottom:1px solid var(--border-subtle); font-size:11px; text-transform:uppercase; color:var(--text-tertiary);">Target</th>
-              <th style="padding:8px; text-align:right; border-bottom:1px solid var(--border-subtle); font-size:11px; text-transform:uppercase; color:var(--text-tertiary);">Posts</th>
-              <th style="padding:8px; text-align:right; border-bottom:1px solid var(--border-subtle); font-size:11px; text-transform:uppercase; color:var(--text-tertiary);">Age</th>
+              <th style="padding:7px 8px; text-align:left; border-bottom:1px solid var(--border-subtle);"><input type="checkbox" id="cache-select-all"></th>
+              <th style="padding:7px 8px; text-align:left; border-bottom:1px solid var(--border-subtle); font-size:10px; text-transform:uppercase; color:var(--text-tertiary);">Target</th>
+              <th style="padding:7px 8px; text-align:right; border-bottom:1px solid var(--border-subtle); font-size:10px; text-transform:uppercase; color:var(--text-tertiary);">Posts</th>
+              <th style="padding:7px 8px; text-align:right; border-bottom:1px solid var(--border-subtle); font-size:10px; text-transform:uppercase; color:var(--text-tertiary);">Status</th>
             </tr>
           </thead>
           <tbody>
             ${entries.length ? entries.map(e => `
               <tr style="border-bottom:1px solid var(--border-subtle);">
-                <td style="padding:8px;"><input type="checkbox" class="cache-cb" value="${esc(e.platform)}_${esc(e.username)}"></td>
-                <td style="padding:8px; font-size:12px;"><strong>${esc(e.platform)}</strong> / ${esc(e.username)}</td>
-                <td style="padding:8px; font-size:12px; text-align:right;">${e.post_count}</td>
-                <td style="padding:8px; font-size:12px; text-align:right; color:${e.is_fresh ? 'var(--green)' : 'var(--amber)'}">${e.is_fresh ? 'Fresh' : 'Stale'}</td>
+                <td style="padding:7px 8px;"><input type="checkbox" class="cache-cb" value="${esc(e.platform)}_${esc(e.username)}"></td>
+                <td style="padding:7px 8px; font-size:12px;"><strong>${esc(e.platform)}</strong> / ${esc(e.username)}</td>
+                <td style="padding:7px 8px; font-size:12px; text-align:right;">${e.post_count}</td>
+                <td style="padding:7px 8px; font-size:12px; text-align:right; color:${e.is_fresh ? 'var(--green)' : 'var(--amber)'}">${e.is_fresh ? 'Fresh' : 'Stale'}</td>
               </tr>
             `).join('') : `<tr><td colspan="4" style="padding:16px; text-align:center; color:var(--text-tertiary); font-size:12px;">Cache is empty.</td></tr>`}
           </tbody>
         </table>
       </div>
-      <div class="modal-actions" style="justify-content:space-between;">
-        <button class="btn danger" onclick="cachePurgeAll()">Purge Entire Cache (All Targets + Media)</button>
+      <div class="modal-actions" style="justify-content:space-between; flex-wrap:wrap; gap:8px;">
+        <button class="btn danger" onclick="cachePurgeAll()">Purge All</button>
         <div style="display:flex; gap:8px;">
           <button class="btn" onclick="closeModal()">Close</button>
           <button class="btn primary" onclick="cachePurgeSelected()">Purge Selected</button>
         </div>
       </div>
     `;
-
     setTimeout(() => {
       const selectAll = document.getElementById('cache-select-all');
-      if (selectAll) {
-        selectAll.addEventListener('change', (e) => {
-          document.querySelectorAll('.cache-cb').forEach(cb => cb.checked = e.target.checked);
-        });
-      }
+      if (selectAll) selectAll.addEventListener('change', e => {
+        document.querySelectorAll('.cache-cb').forEach(cb => cb.checked = e.target.checked);
+      });
     }, 10);
   }
 
@@ -1060,18 +995,17 @@ function openCacheModal() {
     const keys = Array.from(document.querySelectorAll('.cache-cb:checked')).map(cb => cb.value);
     if (!keys.length) { notify('No targets selected.', 'info'); return; }
     if (!confirm(`Delete cached data for ${keys.length} target(s)?`)) return;
-    
     try {
       await apiPost('/cache/purge', { targets: ["specific"], keys });
       await loadCacheStatus();
       if (state.currentSession) renderTargetChips(state.currentSession);
       notify(`Purged ${keys.length} targets`, 'success', 2000);
-      render(); // Re-render modal list
+      render();
     } catch (e) { notify(`Purge failed: ${e.message}`, 'error'); }
   };
 
   window.cachePurgeAll = async () => {
-    if (!confirm('Purge all cached data, media, and outputs? This is irreversible.')) return;
+    if (!confirm('Purge all cached data, media, and outputs?')) return;
     try {
       await apiPost('/cache/purge', { targets: ['all'] });
       await loadCacheStatus();
@@ -1087,8 +1021,6 @@ function openCacheModal() {
 }
 
 /* ── Tabs ─────────────────────────────────────────────────────────────────── */
-
-// Right Panel Tabs (Contacts, Entities, Media)
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const tabId = btn.dataset.tab;
@@ -1098,13 +1030,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
-// Center Panel Tabs (Report, Timeline)
 document.querySelectorAll('.center-tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const tabId = btn.dataset.centerTab;
     document.querySelectorAll('.center-tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    
     document.getElementById('report-view').classList.toggle('visible', tabId === 'report');
     document.getElementById('timeline-view').classList.toggle('visible', tabId === 'timeline');
   });
@@ -1125,7 +1055,7 @@ function openNewSessionModal() {
         New Investigation Session
       </div>
       <label class="form-label">Session Name</label>
-      <input id="ns-name" class="form-input" type="text" placeholder="Operation Nightfall" autocomplete="off">
+      <input id="ns-name" class="form-input" type="text" placeholder="Operation Nightfall" autocomplete="off" autocapitalize="words">
 
       <label class="form-label">Targets</label>
       <div class="targets-list" id="ns-targets">
@@ -1146,13 +1076,14 @@ function openNewSessionModal() {
           <option value="mastodon">mastodon</option>
           <option value="hackernews">hackernews</option>
         </select>
-        <input id="ns-username" class="form-input" type="text" placeholder="username" autocomplete="off" autocorrect="off" spellcheck="false">
+        <input id="ns-username" class="form-input" type="text" placeholder="username"
+               autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
         <button class="btn" onclick="nsAdd()" style="flex-shrink:0">Add</button>
       </div>
 
       <label class="form-label">Initial Post Count</label>
-      <input id="ns-count" class="form-input" type="number" value="50" min="10" max="200" step="10">
-      <div class="form-help">Posts to fetch per target on first analysis. You can change this later.</div>
+      <input id="ns-count" class="form-input" type="number" value="50" min="10" max="200" step="10" inputmode="numeric">
+      <div class="form-help">Posts to fetch per target on first analysis.</div>
 
       <div class="modal-actions">
         <button class="btn danger" onclick="closeModal()">Cancel</button>
@@ -1227,7 +1158,8 @@ function openManageTargetsModal() {
           <option value="mastodon">mastodon</option>
           <option value="hackernews">hackernews</option>
         </select>
-        <input id="mt-username" class="form-input" type="text" placeholder="username" autocomplete="off" autocorrect="off" spellcheck="false">
+        <input id="mt-username" class="form-input" type="text" placeholder="username"
+               autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
         <button class="btn" onclick="mtAdd()" style="flex-shrink:0">Add</button>
       </div>
       <div class="modal-actions">
@@ -1255,11 +1187,8 @@ function openManageTargetsModal() {
       await apiPut(`/sessions/${s.session_id}/targets`, { platforms, fetch_options: s.fetch_options });
       s.platforms = platforms;
       closeModal();
-      
-      // Update cache status to reflect additions
       await loadCacheStatus();
       renderTargetChips(s);
-      
       await refreshSessionList();
       notify('Targets updated', 'success', 2000);
     } catch (e) { notify(`Save failed: ${e.message}`, 'error'); }
@@ -1271,38 +1200,33 @@ function openManageTargetsModal() {
 
 /* ── Modal ────────────────────────────────────────────────────────────────── */
 function closeModal() { document.getElementById('modal-overlay').classList.remove('visible'); }
-document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target === document.getElementById('modal-overlay')) closeModal(); });
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+});
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 /* ── Keyboard shortcut ────────────────────────────────────────────────────── */
 document.getElementById('query-input').addEventListener('keydown', e => {
-  // Execute run ONLY if button is not disabled
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      if (!document.getElementById('run-analysis-btn').disabled) {
-          document.getElementById('run-analysis-btn').click();
-      }
+    if (!document.getElementById('run-analysis-btn').disabled) {
+      document.getElementById('run-analysis-btn').click();
+    }
   }
 });
 
-/* ── Resizable panes ──────────────────────────────────────────────────────── */
+/* ── Resizable panes (desktop only) ──────────────────────────────────────── */
 function makeResizable(handleId, targetEl, direction = 'right', min = 160, max = 480) {
   const handle = document.getElementById(handleId);
   if (!handle) return;
   let startX, startW;
-
   handle.addEventListener('mousedown', e => {
     e.preventDefault();
     startX = e.clientX;
     startW = targetEl.getBoundingClientRect().width;
     handle.classList.add('dragging');
-
     const onMove = e => {
       const delta = direction === 'right' ? e.clientX - startX : startX - e.clientX;
-      const newW = Math.max(min, Math.min(max, startW + delta));
-      targetEl.style.width = newW + 'px';
-      if (targetEl.id === 'right-panel' || targetEl.id === 'sidebar') {
-        targetEl.style.setProperty('--w', newW + 'px');
-      }
+      targetEl.style.width = Math.max(min, Math.min(max, startW + delta)) + 'px';
     };
     const onUp = () => {
       handle.classList.remove('dragging');
@@ -1315,20 +1239,16 @@ function makeResizable(handleId, targetEl, direction = 'right', min = 160, max =
   });
 }
 
-makeResizable('sidebar-resize',  document.getElementById('sidebar'),        'right', 160, 400);
+makeResizable('sidebar-resize',  document.getElementById('sidebar'),         'right', 160, 400);
 makeResizable('history-resize',  document.getElementById('history-sidebar'), 'right', 120, 320);
 makeResizable('right-resize',    document.getElementById('right-panel'),     'left',  220, 520);
 
 /* ── Init ─────────────────────────────────────────────────────────────────── */
 (async function init() {
-  // Restore theme
   const saved = localStorage.getItem('osint-theme') || 'auto';
   applyTheme(saved);
-
   await refreshSessionList();
   await loadCacheStatus();
-
-  // Listen for OS theme changes in auto mode
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     if (state.theme === 'auto') applyTheme('auto');
   });

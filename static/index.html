@@ -2,10 +2,13 @@
 <html lang="en" data-theme="auto">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>OSINT Agent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap">
 <link rel="stylesheet" href="/css/styles.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -37,11 +40,11 @@
 
     <button class="tb-btn" id="btn-cache-mgr">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-      Cache
+      <span class="btn-label">Cache</span>
     </button>
-    <button class="tb-btn" id="btn-new-session">
+    <button class="tb-btn primary" id="btn-new-session">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      New Session
+      <span class="btn-label">New Session</span>
     </button>
     <button id="theme-toggle" title="Toggle theme">
       <svg id="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
@@ -51,6 +54,10 @@
 
   <!-- Main -->
   <div id="main">
+
+    <!-- Sidebar overlay (mobile only) -->
+    <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
     <!-- Left sidebar: sessions -->
     <nav id="sidebar">
       <div class="sidebar-section-header">
@@ -73,7 +80,7 @@
         <p>Create a new investigation session or select one from the sidebar.</p>
         <button class="tb-btn primary" onclick="document.getElementById('btn-new-session').click()" style="margin-top:8px">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          New Session
+          <span class="btn-label">New Session</span>
         </button>
       </div>
 
@@ -81,15 +88,18 @@
       <div id="session-workspace">
         <div id="session-header">
           <div id="session-title" contenteditable="true" spellcheck="false"></div>
-          <button class="tb-btn primary" id="btn-export-session" title="Export full readable investigation report">
+          <button class="tb-btn primary" id="btn-export-session" title="Export full investigation report">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-            Export Full Report (MD)
+            <span class="btn-label">Export</span>
           </button>
           <button class="tb-btn" id="btn-manage-targets">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            Targets
+            <span class="btn-label">Targets</span>
           </button>
-          <button class="tb-btn" id="btn-delete-session" style="color:var(--text-tertiary)">Delete</button>
+          <button class="tb-btn" id="btn-delete-session" style="color:var(--text-tertiary)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            <span class="btn-label">Delete</span>
+          </button>
         </div>
 
         <!-- Target chips -->
@@ -103,33 +113,44 @@
               <option value="mastodon">mastodon</option>
               <option value="hackernews">hackernews</option>
             </select>
-            <input id="add-username-input" class="inline-input" type="text" placeholder="username" autocomplete="off" autocorrect="off" spellcheck="false">
-            <button class="add-btn" type="submit" title="Add">+</button>
+            <input id="add-username-input" class="inline-input" type="text" placeholder="username"
+                   autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+            <button class="add-btn" type="submit" title="Add target">+</button>
           </form>
         </div>
 
         <!-- Query bar -->
         <div id="query-bar">
-          <input id="query-input" type="text" placeholder="What are you investigating? e.g. 'Identify network connections and travel patterns'" autocomplete="off">
-          <div class="query-control">
-            <span>Posts</span>
-            <input type="number" id="fetch-count-input" value="50" min="10" max="200" step="10">
+          <input id="query-input" type="text"
+                 placeholder="What are you investigating?"
+                 autocomplete="off" autocorrect="off" autocapitalize="none">
+          <div class="query-controls-row">
+            <div class="query-control">
+              <span>Posts</span>
+              <input type="number" id="fetch-count-input" value="50" min="10" max="200" step="10">
+            </div>
+            <label class="query-control">
+              <input type="checkbox" id="force-refresh-check">
+              <span>Refresh</span>
+            </label>
           </div>
-          <label class="query-control">
-            <input type="checkbox" id="force-refresh-check">
-            <span>Force refresh</span>
-          </label>
           <button class="run-btn" id="run-analysis-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Run Analysis
+            Run
           </button>
         </div>
 
         <!-- Content area -->
         <div id="content-area">
+
+          <!-- History overlay (mobile) -->
+          <div id="history-overlay" onclick="closeHistory()"></div>
+
           <!-- History sidebar -->
           <div id="history-sidebar">
-            <div class="panel-header"><h3>History</h3></div>
+            <div class="panel-header">
+              <h3>History</h3>
+            </div>
             <div id="history-list"></div>
             <div class="resize-handle" id="history-resize"></div>
           </div>
@@ -140,7 +161,7 @@
               <button class="center-tab-btn active" data-center-tab="report">Report</button>
               <button class="center-tab-btn" data-center-tab="timeline">Timeline</button>
             </div>
-            
+
             <!-- Progress view -->
             <div id="progress-view">
               <div class="progress-header">
@@ -156,14 +177,18 @@
                 <div class="report-query-badge">
                   <strong>Query:</strong> <span id="report-query-label-text"></span>
                 </div>
-                <button class="tb-btn" id="btn-download-md" title="Download report as Markdown">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> Download MD
+                <button class="tb-btn" id="btn-download-md" title="Download Markdown">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                  <span class="btn-label">Download</span>
                 </button>
-                <button class="tb-btn" id="btn-copy-report">Copy</button>
+                <button class="tb-btn" id="btn-copy-report">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <span class="btn-label">Copy</span>
+                </button>
               </div>
               <div id="report-content"></div>
             </div>
-            
+
             <!-- Timeline view -->
             <div id="timeline-view" class="center-pane">
               <div class="timeline-section">
@@ -173,21 +198,22 @@
                   <div class="timeline-empty">Loading timeline...</div>
                 </div>
               </div>
-              
-              <hr class="divider" style="margin: 32px 0;">
-
+              <hr class="divider" style="margin: 28px 0;">
               <div class="timeline-section">
-                <h2 class="timeline-title">Pattern of Life (Post Frequency)</h2>
-                <p class="timeline-subtitle">Aggregate volume by day of week and hour (UTC) across all historical posts.</p>
+                <h2 class="timeline-title">Pattern of Life</h2>
+                <p class="timeline-subtitle">Aggregate volume by day of week and hour (UTC) across all posts.</p>
                 <div id="heatmap-container">
                   <div class="timeline-empty">Loading heatmap...</div>
                 </div>
               </div>
             </div>
-            
-          </div>
 
-          <!-- Right panel: Contacts + Entities + Media -->
+          </div><!-- /center-panel -->
+
+          <!-- Right panel overlay (mobile) -->
+          <div id="right-panel-overlay" onclick="closeRightPanel()"></div>
+
+          <!-- Right panel -->
           <div id="right-panel">
             <div class="resize-handle" style="left:-3px;right:auto;" id="right-resize"></div>
             <div class="tab-bar">
@@ -202,7 +228,8 @@
             <!-- Contacts tab -->
             <div class="tab-pane active" id="contacts-tab">
               <div id="contacts-toolbar">
-                <input class="contacts-search" id="contacts-search" type="text" placeholder="Filter contacts…" autocomplete="off">
+                <input class="contacts-search" id="contacts-search" type="text"
+                       placeholder="Filter contacts…" autocomplete="off" autocapitalize="none">
                 <button class="tb-btn" id="btn-refresh-contacts" title="Refresh contacts">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 </button>
@@ -240,21 +267,60 @@
       </div><!-- /session-workspace -->
     </div><!-- /workspace -->
   </div><!-- /main -->
+
+  <!-- Mobile bottom navigation -->
+  <nav id="mobile-nav">
+    <button class="mob-nav-btn" id="mob-sessions" onclick="toggleSidebar()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18M3 12h18M3 18h18"/>
+      </svg>
+      Sessions
+    </button>
+    <button class="mob-nav-btn" id="mob-history" onclick="toggleHistory()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <polyline points="12 7 12 12 15 15"/>
+      </svg>
+      History
+    </button>
+    <button class="mob-nav-btn" id="mob-run" onclick="document.getElementById('run-analysis-btn').click()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <polygon points="10 8 16 12 10 16 10 8"/>
+      </svg>
+      Run
+    </button>
+    <button class="mob-nav-btn" id="mob-contacts" onclick="toggleRightPanel()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+      Contacts
+      <span class="mob-badge" id="mob-contacts-badge"></span>
+    </button>
+    <button class="mob-nav-btn" id="mob-new" onclick="document.getElementById('btn-new-session').click()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+      New
+    </button>
+  </nav>
+
 </div><!-- /app -->
 
 <!-- Modals -->
 <div id="modal-overlay">
-  <!-- Dynamic Modal Content Area -->
   <div class="modal" id="modal"></div>
 </div>
 
 <!-- Notifications -->
 <div id="notifications"></div>
 
-<!-- Custom Tooltip for D3 Charts -->
+<!-- D3 tooltip -->
 <div id="d3-tooltip" class="chart-tooltip"></div>
 
-<!-- Application Script -->
 <script src="/js/app.js"></script>
 </body>
 </html>
