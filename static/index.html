@@ -283,6 +283,12 @@
                         <input type="text" id="contactSearch" placeholder="Filter contacts..."
                             oninput="filterContacts(this.value)">
                     </div>
+                    <div class="contacts-size-control">
+                        <i class="fa-solid fa-table-cells"></i>
+                        <input type="range" id="contactCardSize" min="160" max="520" value="320" step="20"
+                            oninput="updateContactCardSize(this.value)">
+                        <span id="contactCardSizeLabel" class="size-label">320</span>
+                    </div>
                 </div>
                 <div class="contacts-grid" id="contactsGrid"></div>
             </div>

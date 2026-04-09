@@ -530,9 +530,11 @@ function populatePaneBody(groupEl, pid) {
     else if (pid === 'timeline') body.innerHTML = `<div class="fp-scroll"><div class="timeline-section"><div class="timeline-title">Chronological Activity</div><div class="timeline-subtitle">Posts over time across all targets.</div><div id="fpChrono"></div></div><hr class="timeline-divider"><div class="timeline-section"><div class="timeline-title">Pattern of Life</div><div class="timeline-subtitle">Post frequency by day &times; hour (UTC).</div><div id="fpHeatmap"></div></div></div>`;
     else if (pid === 'history') body.innerHTML = '<div class="fp-scroll" id="fpHistory"></div>';
     else if (pid === 'contacts') {
-        body.innerHTML = `<div class="fp-contacts-panel"><div class="fp-contacts-toolbar"><input type="text" id="fpContactsSearch" placeholder="Filter contacts..."></div><div class="fp-graph-container" id="fpGraphContainer"></div><div class="fp-contacts-list" id="fpContactsList"></div></div>`;
+        body.innerHTML = `<div class="fp-contacts-panel"><div class="fp-contacts-toolbar"><input type="text" id="fpContactsSearch" placeholder="Filter contacts..."></div><div class="fp-graph-container" id="fpGraphContainer"></div><div class="fp-graph-resizer" id="fpGraphResizer"></div><div class="fp-contacts-list" id="fpContactsList"></div></div>`;
         const s = body.querySelector('#fpContactsSearch');
         if (s) s.addEventListener('input', e => { state.panelFilter = e.target.value.toLowerCase(); renderPanelContacts(); });
+        const resizer = body.querySelector('#fpGraphResizer');
+        if (resizer) initGraphResizer(resizer);
     }
     else if (pid === 'entities') body.innerHTML = '<div class="fp-scroll" id="fpEntities"></div>';
     pane.appendChild(body);
@@ -733,6 +735,35 @@ function updatePanelHistory() {
     el.innerHTML = [...history].reverse().map(e => `<div class="fp-history-item ${state.activeQueryId === e.query_id ? 'active' : ''}" onclick="viewReportById('${e.query_id}')"><div class="fp-history-query">${esc(e.query)}</div><div class="fp-history-ts">${fmtDate(e.timestamp)}</div></div>`).join('');
 }
 
+function initGraphResizer(handle) {
+    const graph = handle.previousElementSibling;
+    if (!graph) return;
+    let startY, startH;
+    const onMove = e => {
+        const y = e.touches ? e.touches[0].clientY : e.clientY;
+        const delta = y - startY;
+        const nextH = Math.max(60, Math.min(startH + delta, graph.parentElement.clientHeight - 80));
+        graph.style.setProperty('--graph-height', nextH + 'px');
+    };
+    const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onUp);
+    };
+    const onDown = e => {
+        e.preventDefault();
+        startY = e.touches ? e.touches[0].clientY : e.clientY;
+        startH = graph.getBoundingClientRect().height;
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onUp);
+    };
+    handle.addEventListener('mousedown', onDown);
+    handle.addEventListener('touchstart', onDown, { passive: false });
+}
+
 // ═══════════════ PANEL: CONTACTS ═══════════════
 function renderPanelContacts() {
     const list = document.getElementById('fpContactsList'); if (!list) return;
@@ -922,6 +953,24 @@ function renderContacts(filter) {
 
 function filterContacts(val) { renderContacts(val); }
 
+function updateContactCardSize(val) {
+    const grid = document.getElementById('contactsGrid');
+    const label = document.getElementById('contactCardSizeLabel');
+    if (grid) grid.style.setProperty('--card-min-width', val + 'px');
+    if (label) label.textContent = val;
+    try { localStorage.setItem('osint_contact_card_size', val); } catch {}
+}
+
+function restoreContactCardSize() {
+    try {
+        const saved = localStorage.getItem('osint_contact_card_size');
+        if (saved) {
+            const slider = document.getElementById('contactCardSize');
+            if (slider) { slider.value = saved; updateContactCardSize(saved); }
+        }
+    } catch {}
+}
+
 async function dismissContact(platform, username) { const s = state.currentSession; if (!s) return; try { await apiPost(`/sessions/${s.session_id}/contacts/dismiss`, { platform, username }); toast(`Dismissed ${username}`, 'info'); await loadContacts(); renderContacts(); renderPanelContacts(); } catch (e) { toast('Failed: ' + e.message, 'error'); } }
 
 async function addContactToSession(platform, username) {
@@ -972,6 +1021,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') document.que
 // ═══════════════ INIT ═══════════════
 (async function init() {
     const saved = localStorage.getItem('osint-agent-theme'); applyTheme(saved || 'dark');
+    restoreContactCardSize();
     const qi = document.getElementById('queryInput'); if (qi) qi.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runAnalysis(); });
     const tc = document.getElementById('targetChipsBar'); if (tc) tc.style.display = 'none';
     const qb = document.getElementById('queryBar'); if (qb) qb.style.display = 'none';
