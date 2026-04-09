@@ -40,7 +40,9 @@ class Session:
     ):
         self.session_id = session_id
         self.name = name
-        self.platforms = platforms  # e.g. {"twitter": ["naval"], "github": ["torvalds"]}
+        self.platforms = (
+            platforms  # e.g. {"twitter": ["naval"], "github": ["torvalds"]}
+        )
         self.fetch_options = fetch_options or {"default_count": 50, "targets": {}}
         self.query_history: List[Dict[str, Any]] = []
         # Contacts the user has explicitly dismissed from the network panel.
@@ -50,7 +52,13 @@ class Session:
         self.created_at = datetime.now(timezone.utc).isoformat()
         self.updated_at = self.created_at
 
-    def add_query_result(self, query: str, report: str, metadata: Dict[str, Any], entities: Dict[str, Any] = None) -> str:
+    def add_query_result(
+        self,
+        query: str,
+        report: str,
+        metadata: Dict[str, Any],
+        entities: Dict[str, Any] = None,
+    ) -> str:
         """
         Appends a completed analysis result to the query history.
 
@@ -96,7 +104,9 @@ class Session:
             session_id=data["session_id"],
             name=data["name"],
             platforms=data.get("platforms", {}),
-            fetch_options=data.get("fetch_options", {"default_count": 50, "targets": {}}),
+            fetch_options=data.get(
+                "fetch_options", {"default_count": 50, "targets": {}}
+            ),
         )
         session.query_history = data.get("query_history", [])
         session.dismissed_contacts = data.get("dismissed_contacts", [])
@@ -105,17 +115,22 @@ class Session:
         return session
 
     def summary(self) -> Dict[str, Any]:
-        """
-        Returns a lightweight summary dict suitable for listing sessions
-        without returning full report content.
-        """
         target_count = sum(len(users) for users in self.platforms.values())
+        recent_queries = [
+            {
+                "query_id": q.get("query_id", ""),
+                "query": q.get("query", ""),
+                "timestamp": q.get("timestamp", ""),
+            }
+            for q in (self.query_history or [])[-10:]
+        ]
         return {
             "session_id": self.session_id,
             "name": self.name,
             "platforms": self.platforms,
             "target_count": target_count,
             "query_count": len(self.query_history),
+            "recent_queries": recent_queries,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -137,7 +152,9 @@ class SessionManager:
         """
         self.sessions_dir = base_dir / "sessions"
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"SessionManager initialised. Sessions directory: {self.sessions_dir}")
+        logger.info(
+            f"SessionManager initialised. Sessions directory: {self.sessions_dir}"
+        )
 
     def _session_path(self, session_id: str) -> Path:
         """Returns the file path for a given session ID."""
@@ -237,7 +254,7 @@ class SessionManager:
                 sessions.append(session.summary())
             except Exception as e:
                 logger.warning(f"Could not read session file {path.name}: {e}")
-        
+
         # Sort by most recently updated first
         sessions.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
         return sessions
@@ -288,7 +305,9 @@ class SessionManager:
         self.save(session)
         return session
 
-    def dismiss_contact(self, session_id: str, platform: str, username: str) -> Optional[Session]:
+    def dismiss_contact(
+        self, session_id: str, platform: str, username: str
+    ) -> Optional[Session]:
         """
         Adds a contact to the session's dismissed list so it is hidden from
         the network panel on future loads.
@@ -313,7 +332,9 @@ class SessionManager:
             self.save(session)
         return session
 
-    def undismiss_contact(self, session_id: str, platform: str, username: str) -> Optional[Session]:
+    def undismiss_contact(
+        self, session_id: str, platform: str, username: str
+    ) -> Optional[Session]:
         """
         Removes a contact from the session's dismissed list, making it visible
         in the network panel again.

@@ -14,6 +14,9 @@ venv/
 env/
 *_env/
 
+# Ruff cache
+.ruff_cache/
+
 # Project-Generated Data & Logs
 # The data/ directory contains all runtime-generated content.
 # The leading slash makes it specific to the project root.

@@ -286,6 +286,37 @@ flowchart TD
 *Flowchart Description Note:* In **Offline Mode (`--offline`)**, the "Fetch Platform Data" step and the "Analyze Images" step are both *bypassed*. The analysis proceeds only with information already available in the local cache.
 </details>
 
+## 🏗️ Docker Architecture
+
+The project ships two container images that share the same `data/` volume:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  docker compose                                          │
+│                                                          │
+│  ┌─────────────────────┐   ┌─────────────────────────┐  │
+│  │  web (port 8000)     │   │  agent (cli profile)    │  │
+│  │  Dockerfile.web      │   │  Dockerfile.agent       │  │
+│  │                     │   │                         │  │
+│  │  FastAPI + uvicorn  │   │  CLI (python -m …)      │  │
+│  │  + static frontend  │   │  --stdin / --offline     │  │
+│  │  runs as appuser    │   │  runs as appuser         │  │
+│  └────────┬────────────┘   └────────────┬────────────┘  │
+│           │                             │                │
+│           └──────────┬──────────────────┘                │
+│                      ▼                                   │
+│              ./data/ (shared volume)                     │
+│              ├── cache/    (24h API response cache)      │
+│              ├── media/    (downloaded images)            │
+│              ├── outputs/  (saved reports)               │
+│              └── sessions/ (web session state)           │
+└──────────────────────────────────────────────────────────┘
+```
+
+- **`web`** — Starts automatically with `docker compose up -d web`. Serves the browser UI and REST API. Runs on port 8000 (localhost only).
+- **`agent`** — Excluded from `docker compose up` by default (uses the `cli` profile). Run it on-demand for interactive terminal sessions or batch/stdin processing.
+- **Shared data** — Both containers mount `./data/` so cached platform data, downloaded media, and saved reports are available to both interfaces at all times. Run a target through the CLI, then review the cached data in the web UI — or vice versa.
+
 ## 🛠 Installation
 
 ### Prerequisites
@@ -382,8 +413,20 @@ The web interface provides a full browser-based UI for managing investigation se
 For terminal-based use, the `agent` service runs the original interactive CLI. It is excluded from `docker compose up` by default (uses the `cli` profile) so it never starts unintentionally alongside the web server.
 
 ```bash
+# Interactive session (fetches live data)
 docker compose --profile cli run --rm -it agent
+
+# Offline mode — uses only cached data, no network requests
+docker compose --profile cli run --rm -it agent --offline
+
+# Override log level inside the container
+docker compose --profile cli run --rm -it agent --log-level DEBUG
+
+# Allow media downloads from non-standard CDNs
+docker compose --profile cli run --rm -it agent --unsafe-allow-external-media
 ```
+
+Offline mode is useful for reviewing previously fetched data without making any API calls. Both the web server and CLI share the same `data/` volume, so data cached by one is available to the other.
 
 ### Docker CLI (Programmatic / Stdin)
 
@@ -532,6 +575,8 @@ The web server exposes a versioned REST API at `/api/v1/` that powers the fronte
 *   **API Keys:** All secrets should be stored in the `.env` file and **never** committed to version control.
 *   **Web Authentication:** Set `OSINT_WEB_USER` and `OSINT_WEB_PASSWORD` to enable Basic Auth on the web interface. Without these, the server runs open — only suitable for localhost access via SSH tunnel.
 *   **Network Exposure:** The web server binds to `127.0.0.1` by default. Do not change this to `0.0.0.0` on a public server without also enabling authentication and placing it behind a reverse proxy with TLS.
+*   **Container Hardening:** Both Docker images run as a non-root `appuser` user. Platform names and usernames are validated against an allow-list and sanitized before being used in file paths to prevent directory traversal.
+*   **Media Downloads:** By default, images are only downloaded from known platform CDNs. Use `--unsafe-allow-external-media` (CLI) or the equivalent fetch option to override this when targets use custom hosting.
 *   **Data Caching:** Fetched data and downloaded media are stored locally in `data/`. Secure this directory appropriately given the sensitivity of the subjects being investigated.
 *   **Terms of Service:** Ensure your use of the tool complies with the Terms of Service of each social media platform and your chosen LLM API provider.
 

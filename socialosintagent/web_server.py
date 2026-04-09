@@ -69,10 +69,7 @@ logs_dir.mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(logs_dir / "analyzer.log"),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.FileHandler(logs_dir / "analyzer.log"), logging.StreamHandler()],
 )
 
 logger = logging.getLogger("SocialOSINTAgent.WebServer")
@@ -89,10 +86,22 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 # would exhaust rate limits. Can be increased if platforms allow it.
 _EXECUTOR = ThreadPoolExecutor(max_workers=1)
 
-# In-memory job registry: job_id -> job state dict.
-# Jobs are transient — they exist only for the lifetime of the server process.
-# Results are persisted to the session file once complete.
 _JOBS: Dict[str, Dict[str, Any]] = {}
+_MAX_COMPLETED_JOBS = 50
+
+
+def _prune_old_jobs():
+    """Remove oldest completed/error jobs when the registry exceeds _MAX_COMPLETED_JOBS."""
+    finished = [
+        (jid, j.get("finished_at", ""))
+        for jid, j in _JOBS.items()
+        if j["status"] in ("complete", "error")
+    ]
+    finished.sort(key=lambda x: x[1])
+    while len(finished) > _MAX_COMPLETED_JOBS:
+        jid, _ = finished.pop(0)
+        del _JOBS[jid]
+
 
 # ---------------------------------------------------------------------------
 # FastAPI app setup
@@ -141,17 +150,21 @@ def _check_auth(credentials: Optional[HTTPBasicCredentials] = Depends(_security)
     """
     if not _WEB_USER or not _WEB_PASSWORD:
         return  # Auth not configured — open access
-    
+
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
             headers={"WWW-Authenticate": "Basic"},
         )
-    
-    correct_user = secrets.compare_digest(credentials.username.encode(), _WEB_USER.encode())
-    correct_pass = secrets.compare_digest(credentials.password.encode(), _WEB_PASSWORD.encode())
-    
+
+    correct_user = secrets.compare_digest(
+        credentials.username.encode(), _WEB_USER.encode()
+    )
+    correct_pass = secrets.compare_digest(
+        credentials.password.encode(), _WEB_PASSWORD.encode()
+    )
+
     if not (correct_user and correct_pass):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -163,6 +176,7 @@ def _check_auth(credentials: Optional[HTTPBasicCredentials] = Depends(_security)
 # ---------------------------------------------------------------------------
 # Dependency: shared agent components
 # ---------------------------------------------------------------------------
+
 
 def _get_components():
     """
@@ -181,6 +195,7 @@ def _get_components():
 # SSE progress event helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_event(event_type: str, data: Dict[str, Any]) -> str:
     """Formats a Server-Sent Event string."""
     return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
@@ -193,7 +208,11 @@ def _push_progress(job_id: str, event_type: str, data: Dict[str, Any]):
     """
     if job_id not in _JOBS:
         return
-    event = {"type": event_type, "data": data, "ts": datetime.now(timezone.utc).isoformat()}
+    event = {
+        "type": event_type,
+        "data": data,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
     _JOBS[job_id]["events"].append(event)
     _JOBS[job_id]["progress"] = data
 
@@ -201,6 +220,7 @@ def _push_progress(job_id: str, event_type: str, data: Dict[str, Any]):
 # ---------------------------------------------------------------------------
 # Analysis background job
 # ---------------------------------------------------------------------------
+
 
 def _run_analysis_job(
     job_id: str,
@@ -251,27 +271,35 @@ def _run_analysis_job(
             size, is_terminal, etc.) all work correctly. Only print() and
             status() are overridden so their output reaches the SSE stream.
             """
+
             def __init__(self):
                 import io
+
                 super().__init__(file=io.StringIO(), highlight=False)
 
             def print(self, msg="", **kwargs):
-                clean = re.sub(r'\[/?[a-zA-Z0-9_ ]+\]', '', str(msg)).strip()
+                clean = re.sub(r"\[/?[a-zA-Z0-9_ ]+\]", "", str(msg)).strip()
                 if clean:
                     _push_progress(job_id, "log", {"message": clean})
 
             def status(self, msg="", **kwargs):
-                clean = re.sub(r'\[/?[a-zA-Z0-9_ ]+\]', '', str(msg)).strip()
+                clean = re.sub(r"\[/?[a-zA-Z0-9_ ]+\]", "", str(msg)).strip()
                 if clean:
                     _push_progress(job_id, "status", {"message": clean})
 
                 class _NoOpCtx:
-                    def __enter__(self): return self
-                    def __exit__(self, *_): pass
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *_):
+                        pass
+
                 return _NoOpCtx()
 
         # Stage 1: platform fetches
-        _push_progress(job_id, "stage", {"stage": "fetch", "message": "Fetching platform data..."})
+        _push_progress(
+            job_id, "stage", {"stage": "fetch", "message": "Fetching platform data..."}
+        )
 
         # agent.analyze() signature (from cli_handler.py):
         #   agent.analyze(platforms, query, force_refresh, fetch_options, console=console)
@@ -286,7 +314,11 @@ def _run_analysis_job(
         if result.get("error"):
             _JOBS[job_id]["status"] = "error"
             _JOBS[job_id]["error"] = result.get("report", "Analysis failed")
-            _push_progress(job_id, "error", {"message": result.get("report", "Analysis failed")})
+            _JOBS[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+            _push_progress(
+                job_id, "error", {"message": result.get("report", "Analysis failed")}
+            )
+            _prune_old_jobs()
             return
 
         # Persist result to session
@@ -308,16 +340,24 @@ def _run_analysis_job(
                 logger.error(f"Failed to save standalone markdown report: {e}")
 
         _JOBS[job_id]["status"] = "complete"
-        _push_progress(job_id, "complete", {
-            "message": "Analysis complete",
-            "query_id": _JOBS[job_id].get("query_id"),
-        })
+        _JOBS[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+        _push_progress(
+            job_id,
+            "complete",
+            {
+                "message": "Analysis complete",
+                "query_id": _JOBS[job_id].get("query_id"),
+            },
+        )
+        _prune_old_jobs()
 
     except Exception as e:
         logger.error(f"Analysis job {job_id} failed: {e}", exc_info=True)
         _JOBS[job_id]["status"] = "error"
         _JOBS[job_id]["error"] = str(e)
+        _JOBS[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
         _push_progress(job_id, "error", {"message": str(e)})
+        _prune_old_jobs()
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +365,7 @@ def _run_analysis_job(
 # ---------------------------------------------------------------------------
 
 # ---- Platforms ----
+
 
 @app.get(
     "/api/v1/platforms",
@@ -343,14 +384,12 @@ def get_platforms():
     except Exception as e:
         logger.warning(f"Could not determine platform availability: {e}")
         available = []
-    platforms = [
-        PlatformInfo(name=p, available=(p in available))
-        for p in all_known
-    ]
+    platforms = [PlatformInfo(name=p, available=(p in available)) for p in all_known]
     return PlatformsResponse(platforms=platforms)
 
 
 # ---- Sessions ----
+
 
 @app.get(
     "/api/v1/sessions",
@@ -443,6 +482,7 @@ def update_targets(session_id: str, body: SessionUpdateTargetsRequest):
 
 
 # ---- Analysis jobs ----
+
 
 @app.post(
     "/api/v1/sessions/{session_id}/analyse",
@@ -561,7 +601,9 @@ async def stream_job_progress(job_id: str):
                 sent_index += 1
 
             # If job is done and we've sent everything, close the stream
-            if job["status"] in ("complete", "error") and sent_index >= len(job.get("events", [])):
+            if job["status"] in ("complete", "error") and sent_index >= len(
+                job.get("events", [])
+            ):
                 break
 
             # Yield a keepalive comment every second while waiting for more events
@@ -579,6 +621,7 @@ async def stream_job_progress(job_id: str):
 
 
 # ---- Cache management ----
+
 
 @app.get(
     "/api/v1/cache",
@@ -613,8 +656,7 @@ def get_cache_status():
                 is_fresh = age_seconds < CACHE_EXPIRY_HOURS * 3600
 
                 media_found = sum(
-                    len(post.get("media", []))
-                    for post in data.get("posts", [])
+                    len(post.get("media", [])) for post in data.get("posts", [])
                 )
                 media_analyzed = sum(
                     1
@@ -623,16 +665,18 @@ def get_cache_status():
                     if m.get("analysis")
                 )
 
-                entries.append({
-                    "platform": platform,
-                    "username": data.get("profile", {}).get("username", username),
-                    "post_count": len(data.get("posts", [])),
-                    "media_found": media_found,
-                    "media_analyzed": media_analyzed,
-                    "cached_at": ts.isoformat(),
-                    "age_seconds": int(age_seconds),
-                    "is_fresh": is_fresh,
-                })
+                entries.append(
+                    {
+                        "platform": platform,
+                        "username": data.get("profile", {}).get("username", username),
+                        "post_count": len(data.get("posts", [])),
+                        "media_found": media_found,
+                        "media_analyzed": media_analyzed,
+                        "cached_at": ts.isoformat(),
+                        "age_seconds": int(age_seconds),
+                        "is_fresh": is_fresh,
+                    }
+                )
             except Exception as e:
                 logger.warning(f"Could not read cache file {path.name}: {e}")
 
@@ -675,6 +719,7 @@ def purge_cache(body: PurgeRequest):
 
 # ---- Network / contacts ----
 
+
 @app.get(
     "/api/v1/sessions/{session_id}/contacts",
     response_model=ContactsResponse,
@@ -708,7 +753,8 @@ def get_session_contacts(session_id: str):
     dismissed_set = set(session.dismissed_contacts)
 
     filtered = [
-        c for c in all_contacts
+        c
+        for c in all_contacts
         if f"{c.platform}/{c.username.lower()}" not in dismissed_set
     ]
 
@@ -760,13 +806,16 @@ def undismiss_contact(session_id: str, body: DismissContactRequest):
     in the network panel again.
     """
     _, _, _, session_manager = _get_components()
-    session = session_manager.undismiss_contact(session_id, body.platform, body.username)
+    session = session_manager.undismiss_contact(
+        session_id, body.platform, body.username
+    )
     if not session:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
     return {"undismissed": f"{body.platform}/{body.username.lower()}"}
 
 
 # ---- OSINT Specific APIs (Export, Timeline, Media) ----
+
 
 @app.get(
     "/api/v1/sessions/{session_id}/export",
@@ -777,8 +826,9 @@ def export_session(session_id: str):
     """Exports session data including queries, entities, and contacts."""
     cache_manager, _, _, session_manager = _get_components()
     session = session_manager.load(session_id)
-    if not session: raise HTTPException(status_code=404)
-    
+    if not session:
+        raise HTTPException(status_code=404)
+
     # Bundle contacts
     platform_posts = {}
     for platform, usernames in session.platforms.items():
@@ -786,15 +836,20 @@ def export_session(session_id: str):
         for user in usernames:
             if data := cache_manager.load(platform, user):
                 platform_posts[platform][user] = data.get("posts", [])
-    contacts = [c.to_dict() for c in _extract_contacts(platform_posts, session.platforms)]
-    
+    contacts = [
+        c.to_dict() for c in _extract_contacts(platform_posts, session.platforms)
+    ]
+
     export_data = session.to_dict()
     export_data["extracted_network"] = contacts
-    
+
     return JSONResponse(
         content=export_data,
-        headers={"Content-Disposition": f'attachment; filename="osint_export_{session_id}.json"'}
+        headers={
+            "Content-Disposition": f'attachment; filename="osint_export_{session_id}.json"'
+        },
     )
+
 
 @app.get(
     "/api/v1/sessions/{session_id}/timeline",
@@ -805,8 +860,9 @@ def get_timeline(session_id: str):
     """Returns all post timestamps to generate a pattern-of-life heatmap."""
     cache_manager, _, _, session_manager = _get_components()
     session = session_manager.load(session_id)
-    if not session: raise HTTPException(status_code=404)
-    
+    if not session:
+        raise HTTPException(status_code=404)
+
     events = []
     for platform, usernames in session.platforms.items():
         for user in usernames:
@@ -814,8 +870,11 @@ def get_timeline(session_id: str):
                 for post in data.get("posts", []):
                     ts = post.get("created_at")
                     if ts:
-                        events.append({"timestamp": ts, "platform": platform, "author": user})
+                        events.append(
+                            {"timestamp": ts, "platform": platform, "author": user}
+                        )
     return {"events": events}
+
 
 @app.get(
     "/api/v1/sessions/{session_id}/media",
@@ -826,8 +885,9 @@ def get_media(session_id: str):
     """Returns all downloaded media and their associated LLM analysis."""
     cache_manager, _, _, session_manager = _get_components()
     session = session_manager.load(session_id)
-    if not session: raise HTTPException(status_code=404)
-    
+    if not session:
+        raise HTTPException(status_code=404)
+
     media_items = []
     for platform, usernames in session.platforms.items():
         for user in usernames:
@@ -836,15 +896,18 @@ def get_media(session_id: str):
                     for m in post.get("media", []):
                         # Ensure we only return successfully downloaded local images
                         if m.get("local_path"):
-                            media_items.append({
-                                "url": m.get("url"),
-                                "path": m.get("local_path"),
-                                "analysis": m.get("analysis", ""),
-                                "post_id": post.get("id"),
-                                "platform": platform,
-                                "author": user
-                            })
+                            media_items.append(
+                                {
+                                    "url": m.get("url"),
+                                    "path": m.get("local_path"),
+                                    "analysis": m.get("analysis", ""),
+                                    "post_id": post.get("id"),
+                                    "platform": platform,
+                                    "author": user,
+                                }
+                            )
     return {"media": media_items}
+
 
 @app.get(
     "/api/v1/sessions/{session_id}/media/file",
@@ -869,6 +932,7 @@ def get_media_file(session_id: str, path: str):
 if STATIC_DIR.exists():
     app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 else:
+
     @app.get("/")
     def root():
         return JSONResponse(
@@ -883,6 +947,7 @@ else:
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "socialosintagent.web_server:app",
         host="0.0.0.0",

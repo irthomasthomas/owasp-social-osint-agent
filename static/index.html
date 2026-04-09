@@ -1,326 +1,332 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="auto">
+<html lang="en" data-theme="dark">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>OSINT Agent</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap">
-<link rel="stylesheet" href="/css/styles.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social OSINT Agent</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <link rel="stylesheet" href="/css/styles.css">
 </head>
+
 <body>
-<div id="app">
 
-  <!-- Topbar -->
-  <header id="topbar">
-    <div class="brand">
-      <div class="brand-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/>
-          <path d="M11 8v6M8 11h6"/>
-        </svg>
-      </div>
-      <div>
-        <div class="brand-name">OSINT Agent</div>
-        <div class="brand-sub">Social Intelligence</div>
-      </div>
+    <div class="scanline-overlay"></div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Modal: New Session -->
+    <div class="modal-overlay" id="modalNewSession">
+        <div class="modal">
+            <h2><i class="fa-solid fa-plus"></i> New Analysis Session</h2>
+            <div class="form-group">
+                <label>Session Name</label>
+                <input type="text" id="newSessionName" placeholder="e.g. Target Alpha Assessment">
+            </div>
+            <div class="form-group">
+                <label>Platform</label>
+                <select id="newSessionPlatform">
+                    <option value="bluesky">Bluesky</option>
+                    <option value="twitter">Twitter / X</option>
+                    <option value="mastodon">Mastodon</option>
+                    <option value="reddit">Reddit</option>
+                    <option value="github">GitHub</option>
+                    <option value="hackernews">HackerNews</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Target Handle</label>
+                <input type="text" id="newSessionHandle" placeholder="e.g. user.bsky.social">
+            </div>
+            <div class="form-group">
+                <label>Initial Post Count</label>
+                <input type="number" id="newSessionCount" value="50" min="10" max="200" step="10">
+            </div>
+            <div class="form-actions">
+                <button class="topbar-btn" onclick="closeModal('modalNewSession')">Cancel</button>
+                <button class="topbar-btn primary" onclick="createSession()">Create Session</button>
+            </div>
+        </div>
     </div>
 
-    <div id="global-status">
-      <div class="status-dot" id="status-dot"></div>
-      <span id="status-text">Ready</span>
+    <!-- Modal: Cache Manager -->
+    <div class="modal-overlay" id="modalCache">
+        <div class="modal large">
+            <h2><i class="fa-solid fa-database"></i> Cache Manager</h2>
+            <div id="cacheModalContent"></div>
+            <div class="form-actions">
+                <button class="topbar-btn" onclick="cachePurgeAll()"><i class="fa-solid fa-trash"></i> Purge
+                    All</button>
+                <div style="flex:1"></div>
+                <button class="topbar-btn" onclick="closeModal('modalCache')">Close</button>
+                <button class="topbar-btn primary" onclick="cachePurgeSelected()">Purge Selected</button>
+            </div>
+        </div>
     </div>
 
-    <div class="topbar-spacer"></div>
-
-    <button class="tb-btn" id="btn-cache-mgr">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-      <span class="btn-label">Cache</span>
-    </button>
-    <button class="tb-btn primary" id="btn-new-session">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      <span class="btn-label">New Session</span>
-    </button>
-    <button id="theme-toggle" title="Toggle theme">
-      <svg id="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-      <svg id="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-    </button>
-  </header>
-
-  <!-- Main -->
-  <div id="main">
-
-    <!-- Sidebar overlay (mobile only) -->
-    <div id="sidebar-overlay" onclick="closeSidebar()"></div>
-
-    <!-- Left sidebar: sessions -->
-    <nav id="sidebar">
-      <div class="sidebar-section-header">
-        <h2>Sessions</h2>
-      </div>
-      <div id="session-list"></div>
-      <div class="resize-handle" id="sidebar-resize"></div>
-    </nav>
-
-    <!-- Workspace -->
-    <div id="workspace">
-      <!-- Empty state -->
-      <div id="empty-state">
-        <div class="empty-illustration">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="M16.5 16.5L21 21"/>
-          </svg>
-        </div>
-        <h3>No Session Selected</h3>
-        <p>Create a new investigation session or select one from the sidebar.</p>
-        <button class="tb-btn primary" onclick="document.getElementById('btn-new-session').click()" style="margin-top:8px">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          <span class="btn-label">New Session</span>
-        </button>
-      </div>
-
-      <!-- Session workspace -->
-      <div id="session-workspace">
-        <div id="session-header">
-          <div id="session-title" contenteditable="true" spellcheck="false"></div>
-          <button class="tb-btn primary" id="btn-export-session" title="Export full investigation report">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-            <span class="btn-label">Export</span>
-          </button>
-          <button class="tb-btn" id="btn-manage-targets">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            <span class="btn-label">Targets</span>
-          </button>
-          <button class="tb-btn" id="btn-delete-session" style="color:var(--text-tertiary)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-            <span class="btn-label">Delete</span>
-          </button>
-        </div>
-
-        <!-- Target chips -->
-        <div id="target-chips">
-          <form id="add-target-form" onsubmit="return false;">
-            <select id="add-platform-select" class="inline-select">
-              <option value="twitter">twitter</option>
-              <option value="reddit">reddit</option>
-              <option value="github">github</option>
-              <option value="bluesky">bluesky</option>
-              <option value="mastodon">mastodon</option>
-              <option value="hackernews">hackernews</option>
-            </select>
-            <input id="add-username-input" class="inline-input" type="text" placeholder="username"
-                   autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
-            <button class="add-btn" type="submit" title="Add target">+</button>
-          </form>
-        </div>
-
-        <!-- Query bar -->
-        <div id="query-bar">
-          <input id="query-input" type="text"
-                 placeholder="What are you investigating?"
-                 autocomplete="off" autocorrect="off" autocapitalize="none">
-          <div class="query-controls-row">
-            <div class="query-control">
-              <span>Posts</span>
-              <input type="number" id="fetch-count-input" value="50" min="10" max="200" step="10">
-            </div>
-            <label class="query-control">
-              <input type="checkbox" id="force-refresh-check">
-              <span>Refresh</span>
-            </label>
-          </div>
-          <button class="run-btn" id="run-analysis-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Run
-          </button>
-        </div>
-
-        <!-- Content area -->
-        <div id="content-area">
-
-          <!-- History overlay (mobile) -->
-          <div id="history-overlay" onclick="closeHistory()"></div>
-
-          <!-- History sidebar -->
-          <div id="history-sidebar">
-            <div class="panel-header">
-              <h3>History</h3>
-            </div>
-            <div id="history-list"></div>
-            <div class="resize-handle" id="history-resize"></div>
-          </div>
-
-          <!-- Center panel -->
-          <div id="center-panel">
-            <div class="center-tabs">
-              <button class="center-tab-btn active" data-center-tab="report">Report</button>
-              <button class="center-tab-btn" data-center-tab="timeline">Timeline</button>
-            </div>
-
-            <!-- Progress view -->
-            <div id="progress-view">
-              <div class="progress-header">
-                <div class="spinner"></div>
-                <div class="progress-label" id="progress-stage-label">Initialising...</div>
-              </div>
-              <div id="progress-log"></div>
-            </div>
-
-            <!-- Report view -->
-            <div id="report-view" class="center-pane visible">
-              <div id="report-toolbar">
-                <div class="report-query-badge">
-                  <strong>Query:</strong> <span id="report-query-label-text"></span>
+    <!-- Modal: Manage Targets -->
+    <div class="modal-overlay" id="modalTargets">
+        <div class="modal">
+            <h2><i class="fa-solid fa-crosshairs"></i> Manage Targets</h2>
+            <div id="targetsModalList" class="targets-list"></div>
+            <div class="form-group" style="margin-top:12px">
+                <div style="display:flex;gap:8px;">
+                    <select id="mtPlatform" style="flex:0 0 120px;">
+                        <option value="bluesky">Bluesky</option>
+                        <option value="twitter">Twitter / X</option>
+                        <option value="mastodon">Mastodon</option>
+                        <option value="reddit">Reddit</option>
+                        <option value="github">GitHub</option>
+                        <option value="hackernews">HackerNews</option>
+                    </select>
+                    <input type="text" id="mtUsername" placeholder="username" style="flex:1;">
+                    <button class="topbar-btn" onclick="mtAdd()"><i class="fa-solid fa-plus"></i></button>
                 </div>
-                <button class="tb-btn" id="btn-download-md" title="Download Markdown">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                  <span class="btn-label">Download</span>
+            </div>
+            <div class="form-actions">
+                <button class="topbar-btn" onclick="closeModal('modalTargets')">Cancel</button>
+                <button class="topbar-btn primary" onclick="mtSave()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- App layout -->
+    <div class="app-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="icon-wrap"><i class="fa-solid fa-shield-halved"></i></div>
+                    <div>
+                        <h1>Social OSINT Agent</h1>
+                        <span><a href="https://github.com/bm-github/owasp-social-osint-agent" target="_blank"
+                                rel="noopener">An OWASP Project</a></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-nav">
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Navigation</div>
+                    <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">
+                        <i class="fa-solid fa-grid-2"></i> Dashboard
+                    </div>
+                    <div class="nav-item" data-page="contacts" onclick="switchPage('contacts')">
+                        <i class="fa-solid fa-address-book"></i> Contacts
+                        <span class="count" id="contactCount">0</span>
+                    </div>
+                    <div class="nav-item" data-page="cache" onclick="switchPage('cache')">
+                        <i class="fa-solid fa-database"></i> Cache
+                        <span class="count" id="cacheCount">0</span>
+                    </div>
+                    <div class="nav-item" data-page="media" onclick="switchPage('media')">
+                        <i class="fa-solid fa-images"></i> Media
+                        <span class="count" id="mediaCount">0</span>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Sessions</div>
+                    <div id="sessionList"></div>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <button class="btn-new-session" onclick="openModal('modalNewSession')">
+                    <i class="fa-solid fa-plus"></i> New Session
                 </button>
-                <button class="tb-btn" id="btn-copy-report">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                  <span class="btn-label">Copy</span>
-                </button>
-              </div>
-              <div id="report-content"></div>
             </div>
+        </aside>
 
-            <!-- Timeline view -->
-            <div id="timeline-view" class="center-pane">
-              <div class="timeline-section">
-                <h2 class="timeline-title">Chronological Activity</h2>
-                <p class="timeline-subtitle">Distribution of posts over historical time.</p>
-                <div id="chronological-container">
-                  <div class="timeline-empty">Loading timeline...</div>
+        <!-- Main -->
+        <main class="main-content">
+            <div class="topbar">
+                <div class="topbar-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="globalSearch" placeholder="Search reports, contacts, selectors..."
+                        oninput="handleGlobalSearch(this.value)">
                 </div>
-              </div>
-              <hr class="divider" style="margin: 28px 0;">
-              <div class="timeline-section">
-                <h2 class="timeline-title">Pattern of Life</h2>
-                <p class="timeline-subtitle">Aggregate volume by day of week and hour (UTC) across all posts.</p>
-                <div id="heatmap-container">
-                  <div class="timeline-empty">Loading heatmap...</div>
+                <div class="topbar-actions">
+                    <div id="statusIndicator"
+                        style="display:none;align-items:center;gap:6px;font-size:11px;color:var(--fg-dim);font-family:var(--font-mono);">
+                        <div class="status-dot-running" id="statusDot"></div>
+                        <span id="statusText">Running...</span>
+                    </div>
+                    <button class="topbar-btn" onclick="openModal('modalTargets')" id="btnManageTargets">
+                        <i class="fa-solid fa-crosshairs"></i> <span class="hide-mobile">Targets</span>
+                    </button>
+                    <button id="themeToggle" onclick="toggleTheme()" title="Toggle theme">
+                        <i class="fa-solid fa-moon" id="themeIconMoon"></i>
+                        <i class="fa-solid fa-sun" id="themeIconSun" style="display:none;"></i>
+                    </button>
                 </div>
-              </div>
             </div>
 
-          </div><!-- /center-panel -->
-
-          <!-- Right panel overlay (mobile) -->
-          <div id="right-panel-overlay" onclick="closeRightPanel()"></div>
-
-          <!-- Right panel -->
-          <div id="right-panel">
-            <div class="resize-handle" style="left:-3px;right:auto;" id="right-resize"></div>
-            <div class="tab-bar">
-              <button class="tab-btn active" data-tab="contacts">
-                Contacts
-                <span class="tab-badge" id="contacts-badge" style="display:none">0</span>
-              </button>
-              <button class="tab-btn" data-tab="entities">Entities</button>
-              <button class="tab-btn" data-tab="media">Media</button>
+            <div class="target-chips-bar" id="targetChipsBar">
+                <div id="targetChips"></div>
+                <form class="add-target-inline" id="addTargetForm" onsubmit="return false;">
+                    <select id="addPlatformSelect">
+                        <option value="bluesky">bluesky</option>
+                        <option value="twitter">twitter</option>
+                        <option value="mastodon">mastodon</option>
+                        <option value="reddit">reddit</option>
+                        <option value="github">github</option>
+                        <option value="hackernews">hackernews</option>
+                    </select>
+                    <input type="text" id="addUsernameInput" placeholder="username" autocomplete="off" autocorrect="off"
+                        autocapitalize="none" spellcheck="false">
+                    <button class="add-btn" type="submit" title="Add target" onclick="addTargetInline()">+</button>
+                </form>
             </div>
-
-            <!-- Contacts tab -->
-            <div class="tab-pane active" id="contacts-tab">
-              <div id="contacts-toolbar">
-                <input class="contacts-search" id="contacts-search" type="text"
-                       placeholder="Filter contacts…" autocomplete="off" autocapitalize="none">
-                <button class="tb-btn" id="btn-refresh-contacts" title="Refresh contacts">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-                </button>
-              </div>
-              <div id="graph-container">
-                <div class="graph-empty" id="graph-empty">
-                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
-                  <span>Run an analysis to<br>build the network graph</span>
+            <div class="query-bar" id="queryBar">
+                <div class="query-bar-inner">
+                    <i class="fa-solid fa-terminal query-icon"></i>
+                    <input type="text" id="queryInput" list="querySuggestions" placeholder="Enter analysis query..."
+                        autocomplete="off" autocorrect="off" autocapitalize="none">
+                    <datalist id="querySuggestions">
+                        <option value="Comprehensive profile analysis and OSINT assessment">
+                        <option value="Analyze posting patterns and behavioral indicators">
+                        <option value="Map social network connections and interaction patterns">
+                        <option value="Extract and analyze location data and geolocation indicators">
+                        <option value="Identify potential aliases and linked accounts">
+                        <option value="Assess sentiment, tone, and psychological indicators">
+                        <option value="Generate timeline of key events and activities">
+                        <option value="Analyze media content for contextual intelligence">
+                        <option value="Identify potential operational security vulnerabilities">
+                        <option value="Cross-reference mentions with known entities">
+                    </datalist>
+                    <button class="run-btn" id="btnRunAnalysis" onclick="runAnalysis()">
+                        <i class="fa-solid fa-bolt"></i> <span class="hide-mobile">Run Analysis</span>
+                    </button>
                 </div>
-              </div>
-              <div id="contacts-list">
-                <div class="contacts-empty" id="contacts-empty">
-                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                  No contacts discovered yet. Run an analysis to extract network contacts.
+            </div>
+
+            <!-- Dashboard Page -->
+            <div class="page active" id="page-dashboard">
+                <div class="dash-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Sessions</div>
+                        <div class="stat-value" id="statSessions">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Reports Generated</div>
+                        <div class="stat-value" id="statReports">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Contacts Tracked</div>
+                        <div class="stat-value" id="statContacts">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Cache Entries</div>
+                        <div class="stat-value" id="statCache">0</div>
+                    </div>
                 </div>
-              </div>
+                <div class="dash-columns">
+                    <div class="dash-col-main">
+                        <div class="dash-section-title"><i class="fa-solid fa-file-lines"></i> Recent Reports</div>
+                        <div id="recentReportsList"></div>
+                    </div>
+                    <div class="dash-col-side">
+                        <div class="dash-section-title"><i class="fa-solid fa-folder-open"></i> Sessions</div>
+                        <div id="dashSessionList"></div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Entities tab -->
-            <div class="tab-pane" id="entities-tab">
-              <div id="entities-content">
-                <div style="color:var(--text-tertiary);text-align:center;padding:32px 16px;font-size:11px;">Run an analysis to extract selectors (emails, locations, crypto, etc.)</div>
-              </div>
+            <!-- Report Page -->
+            <div class="page" id="page-report">
+                <div class="report-header-bar" id="reportHeaderBar">
+                    <div class="report-header-top">
+                        <div>
+                            <div class="report-query" id="reportQueryText"></div>
+                            <div class="report-session-name" id="reportSessionName"></div>
+                        </div>
+                        <div class="report-header-actions">
+                            <button class="topbar-btn" onclick="downloadReport()">
+                                <i class="fa-solid fa-download"></i> <span class="hide-mobile">Download</span>
+                            </button>
+                            <button class="topbar-btn" onclick="copyReport()">
+                                <i class="fa-solid fa-copy"></i> <span class="hide-mobile">Copy</span>
+                            </button>
+                            <button class="topbar-btn" onclick="resetLayout()" title="Reset panel layout">
+                                <i class="fa-solid fa-table-columns"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="report-meta-row" id="reportMetaRow"></div>
+                </div>
+                <div id="panelCanvas"></div>
             </div>
 
-            <!-- Media tab -->
-            <div class="tab-pane" id="media-tab">
-              <div class="media-grid" id="media-grid-content">
-                <div style="grid-column:1/-1;color:var(--text-tertiary);text-align:center;padding:32px 16px;font-size:11px;">No media files downloaded yet.</div>
-              </div>
+            <!-- Progress Page -->
+            <div class="page" id="page-progress">
+                <div class="loading-bar" id="progressBar"></div>
+                <div class="report-section" style="margin-top:20px;">
+                    <h3><span class="section-num"><i class="fa-solid fa-spinner fa-spin"></i></span> <span
+                            id="progressStageLabel">Starting analysis...</span></h3>
+                    <div id="progressLog"
+                        style="font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);max-height:400px;overflow-y:auto;line-height:1.8;">
+                    </div>
+                </div>
             </div>
 
-          </div><!-- /right-panel -->
-        </div><!-- /content-area -->
-      </div><!-- /session-workspace -->
-    </div><!-- /workspace -->
-  </div><!-- /main -->
+            <!-- Contacts Page -->
+            <div class="page" id="page-contacts">
+                <div class="contacts-toolbar">
+                    <div class="contacts-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="contactSearch" placeholder="Filter contacts..."
+                            oninput="filterContacts(this.value)">
+                    </div>
+                </div>
+                <div class="contacts-grid" id="contactsGrid"></div>
+            </div>
 
-  <!-- Mobile bottom navigation -->
-  <nav id="mobile-nav">
-    <button class="mob-nav-btn" id="mob-sessions" onclick="toggleSidebar()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M3 6h18M3 12h18M3 18h18"/>
-      </svg>
-      Sessions
-    </button>
-    <button class="mob-nav-btn" id="mob-history" onclick="toggleHistory()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="9"/>
-        <polyline points="12 7 12 12 15 15"/>
-      </svg>
-      History
-    </button>
-    <button class="mob-nav-btn" id="mob-run" onclick="document.getElementById('run-analysis-btn').click()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="9"/>
-        <polygon points="10 8 16 12 10 16 10 8"/>
-      </svg>
-      Run
-    </button>
-    <button class="mob-nav-btn" id="mob-contacts" onclick="toggleRightPanel()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-        <circle cx="9" cy="7" r="4"/>
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-      </svg>
-      Contacts
-      <span class="mob-badge" id="mob-contacts-badge"></span>
-    </button>
-    <button class="mob-nav-btn" id="mob-new" onclick="document.getElementById('btn-new-session').click()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 5v14M5 12h14"/>
-      </svg>
-      New
-    </button>
-  </nav>
+            <!-- Cache Page -->
+            <div class="page" id="page-cache">
+                <div class="cache-stats">
+                    <div class="cache-stat">
+                        <div class="cs-value" id="cacheTotal">0</div>
+                        <div class="cs-label">Total Entries</div>
+                    </div>
+                    <div class="cache-stat">
+                        <div class="cs-value" id="cacheHits">0</div>
+                        <div class="cs-label">Fresh</div>
+                    </div>
+                    <div class="cache-stat">
+                        <div class="cs-value" id="cacheExpired">0</div>
+                        <div class="cs-label">Stale</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:16px;">
+                    <button class="topbar-btn" onclick="filterCache('all')"><i class="fa-solid fa-layer-group"></i>
+                        All</button>
+                    <button class="topbar-btn" onclick="filterCache('fresh')"><i class="fa-solid fa-circle"
+                            style="color:var(--accent);font-size:8px;"></i> Fresh</button>
+                    <button class="topbar-btn" onclick="filterCache('stale')"><i class="fa-solid fa-circle"
+                            style="color:var(--warning);font-size:8px;"></i> Stale</button>
+                    <button class="topbar-btn" style="margin-left:auto;" onclick="cachePurgeAll()"><i
+                            class="fa-solid fa-trash"></i> Purge All</button>
+                </div>
+                <div class="cache-list" id="cacheList"></div>
+            </div>
 
-</div><!-- /app -->
+            <!-- Media Page -->
+            <div class="page" id="page-media">
+                <div class="dash-section-title"><i class="fa-solid fa-images"></i> Downloaded Media</div>
+                <div class="media-grid" id="mediaGrid"></div>
+            </div>
 
-<!-- Modals -->
-<div id="modal-overlay">
-  <div class="modal" id="modal"></div>
-</div>
+        </main>
+    </div>
 
-<!-- Notifications -->
-<div id="notifications"></div>
-
-<!-- D3 tooltip -->
-<div id="d3-tooltip" class="chart-tooltip"></div>
-
-<script src="/js/app.js"></script>
+    <script src="/js/app.js"></script>
+    <div id="d3Tooltip" class="chart-tooltip"></div>
 </body>
+
 </html>
