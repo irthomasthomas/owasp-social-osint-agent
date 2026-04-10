@@ -79,7 +79,7 @@ The [interactive demo](https://bm-github.github.io/owasp-social-osint-agent/demo
 
 The web interface provides a full browser-based investigation environment that requires no terminal interaction after startup.
 
-> **Want to see it before installing?** Check out the [interactive demo](https://bm-github.github.io/owasp-social-osint-agent/socialosintagent-demo.html) — it runs in your browser with no setup required.
+> **Want to see it before installing?** Check out the [interactive demo](https://bm-github.github.io/owasp-social-osint-agent/demo.html) — it runs in your browser with no setup required.
 
 ### Starting the web server
 
