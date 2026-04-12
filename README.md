@@ -1,5 +1,5 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/bm-github/owasp-social-osint-agent)](https://github.com/bm-github/owasp-social-osint-agent/releases/latest)
-[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://bm-github.github.io/owasp-social-osint-agent/socialosintagent-demo.html)
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://bm-github.github.io/owasp-social-osint-agent/demo.html)
 
 # 🕵️ owasp-social-osint-agent
 
@@ -11,9 +11,9 @@ The agent can be driven through a **web interface** (recommended) or a **command
 
 **Try it instantly — no installation required.**
 
-[![OSINT Agent – Interactive Demo](https://img.shields.io/badge/Open%20Interactive%20Demo-%E2%86%92-38bdf8?style=for-the-badge&logo=github)](https://bm-github.github.io/owasp-social-osint-agent/socialosintagent-demo.html)
+[![OSINT Agent – Interactive Demo](https://img.shields.io/badge/Open%20Interactive%20Demo-%E2%86%92-38bdf8?style=for-the-badge&logo=github)](https://bm-github.github.io/owasp-social-osint-agent/demo.html)
 
-The [interactive demo](https://bm-github.github.io/owasp-social-osint-agent/socialosintagent-demo.html) runs entirely in your browser with pre-loaded investigation data — no backend, no API keys, no Docker required. It showcases the full web UI including:
+The [interactive demo](https://bm-github.github.io/owasp-social-osint-agent/demo.html) runs entirely in your browser with pre-loaded investigation data — no backend, no API keys, no Docker required. It showcases the full web UI including:
 
 - **Session management** with two pre-loaded example investigations
 - **Analysis reports** rendered from realistic mock OSINT data
