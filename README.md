@@ -5,7 +5,7 @@
 
 **OWASP Social OSINT Agent** is an intelligent, autonomous agent designed for open-source intelligence (OSINT) investigations. It leverages both text and vision-capable Large Language Models (LLMs) via any OpenAI-compatible API to autonomously gather, analyze, and synthesize user activity across single or multiple social media platforms. The final output is a structured analytical report that turns scattered public data into coherent, actionable intelligence.
 
-The agent can be driven through a **web interface** (recommended) or a **command-line interface**, both backed by the same engine and sharing the same data cache.
+The agent can be driven through a **web interface** (recommended) or a **command-line interface**, both backed by the same engine. Each interface has its own isolated data directory so they never share or overwrite each other's data.
 
 ## 🎮 Live Demo
 
@@ -65,7 +65,7 @@ The [interactive demo](https://bm-github.github.io/owasp-social-osint-agent/soci
 
 ✅ **Intelligent Rate Limit Handling:** Detects API rate limits from social platforms and LLM providers, provides informative feedback, and prevents excessive requests.
 
-✅ **Robust Caching System:** Caches fetched text data for 24 hours (`data/cache/`) and media files (`data/media/`) to reduce API calls and speed up subsequent analyses. Vision analysis results are also cached.
+✅ **Robust Caching System:** Caches fetched text data for 24 hours (`data-web/cache/` or `data-agent/cache/`) and media files (`data-web/media/` or `data-agent/media/`) to reduce API calls and speed up subsequent analyses. Vision analysis results are also cached.
 
 ✅ **Cache Management:** View a summary of all cached data or purge specific types from the web UI or interactive CLI commands.
 
@@ -288,14 +288,14 @@ flowchart TD
 
 ## 🏗️ Docker Architecture
 
-The project ships two container images that share the same `data/` volume:
+The project ships two container images, each with its own isolated data directory:
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  docker compose                                          │
 │                                                          │
 │  ┌─────────────────────┐   ┌─────────────────────────┐  │
-│  │  web (port 8000)     │   │  agent (cli profile)    │  │
+│  │  web (port 8000)     │   │  agent                  │  │
 │  │  Dockerfile.web      │   │  Dockerfile.agent       │  │
 │  │                     │   │                         │  │
 │  │  FastAPI + uvicorn  │   │  CLI (python -m …)      │  │
@@ -303,19 +303,18 @@ The project ships two container images that share the same `data/` volume:
 │  │  runs as appuser    │   │  runs as appuser         │  │
 │  └────────┬────────────┘   └────────────┬────────────┘  │
 │           │                             │                │
-│           └──────────┬──────────────────┘                │
-│                      ▼                                   │
-│              ./data/ (shared volume)                     │
-│              ├── cache/    (24h API response cache)      │
-│              ├── media/    (downloaded images)            │
-│              ├── outputs/  (saved reports)               │
-│              └── sessions/ (web session state)           │
+│           ▼                             ▼                │
+│     ./data-web/                  ./data-agent/           │
+│     ├── cache/                   ├── cache/              │
+│     ├── media/                   ├── media/              │
+│     ├── outputs/                 ├── outputs/            │
+│     └── sessions/                └──                     │
 └──────────────────────────────────────────────────────────┘
 ```
 
-- **`web`** — Starts automatically with `docker compose up -d web`. Serves the browser UI and REST API. Runs on port 8000 (localhost only).
-- **`agent`** — Excluded from `docker compose up` by default (uses the `cli` profile). Run it on-demand for interactive terminal sessions or batch/stdin processing.
-- **Shared data** — Both containers mount `./data/` so cached platform data, downloaded media, and saved reports are available to both interfaces at all times. Run a target through the CLI, then review the cached data in the web UI — or vice versa.
+- **`web`** — Start with `docker compose up -d web`. Serves the browser UI and REST API. Runs on port 8000 (localhost only). Data stored in `./data-web/`.
+- **`agent`** — Run on-demand with `docker compose --profile cli run --rm -it agent` for interactive terminal sessions or batch/stdin processing. Uses the `cli` profile so it never starts unintentionally alongside the web server. Data stored in `./data-agent/`.
+- **Isolated data** — Each service has its own data directory so cached platform data, downloaded media, and saved reports are kept completely separate.
 
 ## 🛠 Installation
 
@@ -410,7 +409,7 @@ The web interface provides a full browser-based UI for managing investigation se
 
 ### Docker CLI (Interactive)
 
-For terminal-based use, the `agent` service runs the original interactive CLI. It is excluded from `docker compose up` by default (uses the `cli` profile) so it never starts unintentionally alongside the web server.
+For terminal-based use, the `agent` service runs the original interactive CLI. It uses the `cli` profile so it is excluded from `docker compose up` and must be run on-demand:
 
 ```bash
 # Interactive session (fetches live data)
@@ -426,7 +425,7 @@ docker compose --profile cli run --rm -it agent --log-level DEBUG
 docker compose --profile cli run --rm -it agent --unsafe-allow-external-media
 ```
 
-Offline mode is useful for reviewing previously fetched data without making any API calls. Both the web server and CLI share the same `data/` volume, so data cached by one is available to the other.
+Offline mode is useful for reviewing previously fetched data without making any API calls. The agent stores its data in `./data-agent/`, completely separate from the web server's `./data-web/`.
 
 ### Docker CLI (Programmatic / Stdin)
 
@@ -525,10 +524,10 @@ Within the analysis session, you can use these commands instead of an analysis q
 *   `/exit`: Returns to the main platform selection menu.
 
 ## ⚡ Cache System
-*   **Text/API Data:** Fetched platform data is cached for **24 hours** in `data/cache/` as JSON files.
-*   **Media Files:** Downloaded images and media are stored in `data/media/`.
+*   **Text/API Data:** Fetched platform data is cached for **24 hours** as JSON files (`data-web/cache/` for web, `data-agent/cache/` for CLI).
+*   **Media Files:** Downloaded images and media are stored in `data-web/media/` or `data-agent/media/`.
 *   **Vision Analysis:** AI-generated image analyses are saved back into the corresponding user's cache file, preventing re-analysis of the same image.
-*   Both the web interface and CLI share the same `data/` directory, so cached data is always available to both.
+*   Each service has its own isolated data directory — cached data is not shared between web and CLI.
 *   Use `/refresh` in the CLI or the "force refresh" toggle in the web UI to bypass the cache. Use "Purge All" in the web UI or "Purge Data" in the CLI to clear media files.
 
 ## 🤖 AI Analysis Details
@@ -577,7 +576,7 @@ The web server exposes a versioned REST API at `/api/v1/` that powers the fronte
 *   **Network Exposure:** The web server binds to `127.0.0.1` by default. Do not change this to `0.0.0.0` on a public server without also enabling authentication and placing it behind a reverse proxy with TLS.
 *   **Container Hardening:** Both Docker images run as a non-root `appuser` user. Platform names and usernames are validated against an allow-list and sanitized before being used in file paths to prevent directory traversal.
 *   **Media Downloads:** By default, images are only downloaded from known platform CDNs. Use `--unsafe-allow-external-media` (CLI) or the equivalent fetch option to override this when targets use custom hosting.
-*   **Data Caching:** Fetched data and downloaded media are stored locally in `data/`. Secure this directory appropriately given the sensitivity of the subjects being investigated.
+*   **Data Caching:** Fetched data and downloaded media are stored locally in `data-web/` (web) and `data-agent/` (CLI). Secure these directories appropriately given the sensitivity of the subjects being investigated.
 *   **Terms of Service:** Ensure your use of the tool complies with the Terms of Service of each social media platform and your chosen LLM API provider.
 
 ## 🤝 Contributing

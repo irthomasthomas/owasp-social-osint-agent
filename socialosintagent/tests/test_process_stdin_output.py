@@ -9,7 +9,6 @@ Covers:
 - successful stdin flow always exits with code 0
 """
 
-import argparse
 import json
 from io import StringIO
 from pathlib import Path
@@ -17,7 +16,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
-from socialosintagent.analyzer import SocialOSINTAgent
+from socialosintagent.analyzer import AgentConfig, SocialOSINTAgent
 from socialosintagent.cache import CacheManager
 from socialosintagent.client_manager import ClientManager
 from socialosintagent.llm import LLMAnalyzer
@@ -47,11 +46,12 @@ def _make_agent(monkeypatch, tmp_path, no_auto_save=True, fmt="markdown"):
     monkeypatch.setenv("IMAGE_ANALYSIS_MODEL", "test_vision_model")
     monkeypatch.setenv("ANALYSIS_MODEL", "test_text_model")
 
-    args = argparse.Namespace(
+    config = AgentConfig(
         offline=False,
         no_auto_save=no_auto_save,
-        format=fmt,
+        output_format=fmt,
         unsafe_allow_external_media=False,
+        base_dir=tmp_path,
     )
     mock_cache = create_autospec(CacheManager, instance=True)
     with patch("socialosintagent.llm._load_prompt", return_value="mock prompt"):
@@ -59,8 +59,7 @@ def _make_agent(monkeypatch, tmp_path, no_auto_save=True, fmt="markdown"):
     mock_cm = create_autospec(ClientManager, instance=True)
     mock_cm.get_available_platforms.return_value = ["hackernews"]
 
-    agent = SocialOSINTAgent(args, mock_cache, mock_llm, mock_cm)
-    agent.base_dir = tmp_path
+    agent = SocialOSINTAgent(config, mock_cache, mock_llm, mock_cm)
     (tmp_path / "outputs").mkdir(parents=True, exist_ok=True)
     agent.analyze = MagicMock(return_value=SAMPLE_RESULT)
     return agent
@@ -75,7 +74,6 @@ def _run(agent, payload):
 
 
 class TestProcessStdinOutput:
-
     def test_no_auto_save_markdown_prints_report_to_stdout(
         self, monkeypatch, tmp_path, capsys
     ):

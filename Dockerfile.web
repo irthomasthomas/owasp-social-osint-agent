@@ -1,7 +1,6 @@
 # Dockerfile.web
 #
-# Self-contained web server image. Builds directly from the Python base image
-# so `docker compose up -d web` works without any pre-build step.
+# Self-contained web server image.
 #
 # Usage:
 #   docker compose up -d web          # build + start web server
@@ -19,8 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install core agent dependencies first (better layer caching - these
-# change less often than the source code)
+# Install core agent dependencies first (better layer caching)
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -31,15 +29,11 @@ RUN pip install --no-cache-dir -r requirements-web.txt
 # Copy the full agent package
 COPY socialosintagent/ ./socialosintagent/
 
-# Copy the static frontend (index.html and any other assets)
+# Copy the static frontend
 COPY static/ ./static/
 
 # data/ is intentionally NOT copied - it is mounted at runtime as a volume
-# so that the container shares cache, media, and outputs with the host / CLI.
 
 EXPOSE 8000
-
-RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
 
 CMD ["uvicorn", "socialosintagent.web_server:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]

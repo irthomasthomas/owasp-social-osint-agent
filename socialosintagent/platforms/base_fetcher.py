@@ -108,11 +108,25 @@ class BaseFetcher(ABC):
 
     def _handle_api_error(self, error: Exception, username: str) -> None:
         error_str = str(error).lower()
-        if any(p in error_str for p in ["rate limit", "too many requests", "429"]):
+
+        # Extract HTTP status code from common exception patterns:
+        # tweepy/requests: error.response.status_code
+        # httpx/generic: error.response.status_code or error.status_code
+        status_code = None
+        response = getattr(error, "response", None)
+        if response is not None:
+            status_code = getattr(response, "status_code", None)
+        if status_code is None:
+            status_code = getattr(error, "status_code", None)
+
+        # Rate limit: check status code 429 and message patterns
+        if status_code == 429 or any(p in error_str for p in ["rate limit", "too many requests", "429"]):
             raise RateLimitExceededError(f"{self.platform_name} API rate limit exceeded", original_exception=error)
-        if any(p in error_str for p in ["not found", "404", "does not exist"]):
+        # Not found: check status code 404 and message patterns
+        if status_code == 404 or any(p in error_str for p in ["not found", "404", "does not exist"]):
             raise UserNotFoundError(f"{self.platform_name} user '{username}' not found") from error
-        if any(p in error_str for p in ["forbidden", "403", "private", "suspended"]):
+        # Forbidden: check status code 403 and message patterns
+        if status_code == 403 or any(p in error_str for p in ["forbidden", "403", "private", "suspended"]):
             raise AccessForbiddenError(f"Access to {self.platform_name} user '{username}' is forbidden") from error
         raise error
 

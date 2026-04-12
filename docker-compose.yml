@@ -1,17 +1,17 @@
 # docker-compose.yml
 #
-# Two services:
+# Two services with separate named volumes:
 #
-#   web    — FastAPI web server (the main service).
+#   web    — FastAPI web server.
 #             docker compose up -d web
 #             Serves the frontend at http://localhost:8000
 #             and the REST API at http://localhost:8000/api/v1/
+#             Data stored in the osint-web-data volume.
 #
-#   agent  — Original CLI agent, for interactive/one-shot use.
+#   agent  — CLI agent, for interactive/one-shot use.
 #             docker compose --profile cli run --rm -it agent
-#
-# Both services share ./data as a volume so they use the same
-# platform data cache, downloaded media, and outputs directory.
+#             Data stored in the osint-agent-data volume.
+#             Uses the "cli" profile so it never starts with `docker compose up`.
 #
 # Authentication:
 #   The web service binds to 127.0.0.1:8000 (localhost only).
@@ -38,7 +38,7 @@ services:
       dockerfile: Dockerfile.web
     image: osint-agent-web:latest
     volumes:
-      - ./data:/app/data            # Shared with CLI: cache, media, outputs
+      - osint-web-data:/app/data
     env_file: .env
     working_dir: /app
     ports:
@@ -61,11 +61,14 @@ services:
       dockerfile: Dockerfile.agent
     image: osint-agent:latest
     volumes:
-      - ./data:/app/data
+      - osint-agent-data:/app/data
     env_file: .env
     working_dir: /app
     stdin_open: true
     tty: true
-    # NOTE: `command:` has been removed. Dockerfile.agent uses ENTRYPOINT now.
     profiles:
       - cli                         # Excluded from `docker compose up` by default.
+
+volumes:
+  osint-web-data:
+  osint-agent-data:

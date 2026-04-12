@@ -27,6 +27,7 @@ import os
 import re
 import secrets
 import shutil
+import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -40,7 +41,7 @@ from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 
-from .analyzer import SocialOSINTAgent
+from .analyzer import AgentConfig, SocialOSINTAgent
 from .api_models import (
     AnalysisRequest,
     CacheStatusResponse,
@@ -84,9 +85,10 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 # Thread pool for running the synchronous agent in async context.
 # Single worker ensures we don't make simultaneous multi-API calls that
 # would exhaust rate limits. Can be increased if platforms allow it.
-_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+_EXECUTOR = ThreadPoolExecutor(max_workers=3)
 
 _JOBS: Dict[str, Dict[str, Any]] = {}
+_JOBS_LOCK = threading.Lock()
 _MAX_COMPLETED_JOBS = 50
 
 
@@ -178,17 +180,27 @@ def _check_auth(credentials: Optional[HTTPBasicCredentials] = Depends(_security)
 # ---------------------------------------------------------------------------
 
 
+_shared_components = None
+
+
 def _get_components():
     """
-    Builds and returns the shared agent components.
-    Called once per request where needed — components are lightweight to
-    construct since the LLM client and API clients are lazily initialised.
+    Returns shared agent components (singleton per process).
+
+    Created once and reused across all requests. The LLM client and platform
+    API clients are lazily initialised inside each component, so creating them
+    is cheap — but the lazy clients themselves should survive across requests
+    rather than being thrown away.
     """
-    cache_manager = CacheManager(BASE_DIR, is_offline=False)
-    llm_analyzer = LLMAnalyzer(is_offline=False)
-    client_manager = ClientManager(is_offline=False)
-    session_manager = SessionManager(BASE_DIR)
-    return cache_manager, llm_analyzer, client_manager, session_manager
+    global _shared_components
+    if _shared_components is None:
+        _shared_components = (
+            CacheManager(BASE_DIR, is_offline=False),
+            LLMAnalyzer(is_offline=False),
+            ClientManager(is_offline=False),
+            SessionManager(BASE_DIR),
+        )
+    return _shared_components
 
 
 # ---------------------------------------------------------------------------
@@ -205,16 +217,19 @@ def _push_progress(job_id: str, event_type: str, data: Dict[str, Any]):
     """
     Appends a progress event to the job's event queue.
     Also updates the job's latest progress snapshot for polling clients.
+    Thread-safe: acquires _JOBS_LOCK to prevent data races between the
+    analysis worker thread and the async event loop.
     """
-    if job_id not in _JOBS:
-        return
-    event = {
-        "type": event_type,
-        "data": data,
-        "ts": datetime.now(timezone.utc).isoformat(),
-    }
-    _JOBS[job_id]["events"].append(event)
-    _JOBS[job_id]["progress"] = data
+    with _JOBS_LOCK:
+        if job_id not in _JOBS:
+            return
+        event = {
+            "type": event_type,
+            "data": data,
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
+        _JOBS[job_id]["events"].append(event)
+        _JOBS[job_id]["progress"] = data
 
 
 # ---------------------------------------------------------------------------
@@ -240,20 +255,18 @@ def _run_analysis_job(
     This function is intentionally synchronous — it runs in a ThreadPoolExecutor
     so the async FastAPI event loop is never blocked.
     """
-    import argparse
-
-    # Build a minimal args namespace matching what SocialOSINTAgent expects
-    args = argparse.Namespace(
+    config = AgentConfig(
         offline=False,
         no_auto_save=True,
-        format="markdown",
+        output_format="markdown",
         unsafe_allow_external_media=False,
+        base_dir=BASE_DIR,
     )
 
     try:
         cache_manager, llm_analyzer, client_manager, session_manager = _get_components()
 
-        agent = SocialOSINTAgent(args, cache_manager, llm_analyzer, client_manager)
+        agent = SocialOSINTAgent(config, cache_manager, llm_analyzer, client_manager)
 
         # We intercept the agent's internal progress by wrapping the fetcher
         # and image processor calls. The simplest approach is to use a progress
@@ -312,13 +325,15 @@ def _run_analysis_job(
         )
 
         if result.get("error"):
-            _JOBS[job_id]["status"] = "error"
-            _JOBS[job_id]["error"] = result.get("report", "Analysis failed")
-            _JOBS[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+            with _JOBS_LOCK:
+                _JOBS[job_id]["status"] = "error"
+                _JOBS[job_id]["error"] = result.get("report", "Analysis failed")
+                _JOBS[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
             _push_progress(
                 job_id, "error", {"message": result.get("report", "Analysis failed")}
             )
-            _prune_old_jobs()
+            with _JOBS_LOCK:
+                _prune_old_jobs()
             return
 
         # Persist result to session
@@ -335,12 +350,13 @@ def _run_analysis_job(
 
             # Automatically save the markdown report to the outputs directory
             try:
-                agent._save_output_headless(result, args.format)
+                agent.save_report(result, config.output_format)
             except Exception as e:
                 logger.error(f"Failed to save standalone markdown report: {e}")
 
-        _JOBS[job_id]["status"] = "complete"
-        _JOBS[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+        with _JOBS_LOCK:
+            _JOBS[job_id]["status"] = "complete"
+            _JOBS[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
         _push_progress(
             job_id,
             "complete",
@@ -349,15 +365,19 @@ def _run_analysis_job(
                 "query_id": _JOBS[job_id].get("query_id"),
             },
         )
-        _prune_old_jobs()
+        with _JOBS_LOCK:
+            _prune_old_jobs()
 
     except Exception as e:
         logger.error(f"Analysis job {job_id} failed: {e}", exc_info=True)
-        _JOBS[job_id]["status"] = "error"
-        _JOBS[job_id]["error"] = str(e)
-        _JOBS[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+        with _JOBS_LOCK:
+            if job_id in _JOBS:
+                _JOBS[job_id]["status"] = "error"
+                _JOBS[job_id]["error"] = str(e)
+                _JOBS[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
         _push_progress(job_id, "error", {"message": str(e)})
-        _prune_old_jobs()
+        with _JOBS_LOCK:
+            _prune_old_jobs()
 
 
 # ---------------------------------------------------------------------------
@@ -505,25 +525,26 @@ async def start_analysis(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Check for an already-running job for this session
-    for job in _JOBS.values():
-        if job["session_id"] == session_id and job["status"] == "running":
-            raise HTTPException(
-                status_code=409,
-                detail=f"Session already has a running analysis job: {job['job_id']}",
-            )
+    # Check for an already-running job for this session (thread-safe)
+    with _JOBS_LOCK:
+        for job in _JOBS.values():
+            if job["session_id"] == session_id and job["status"] == "running":
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Session already has a running analysis job: {job['job_id']}",
+                )
 
-    job_id = str(uuid.uuid4())
-    _JOBS[job_id] = {
-        "job_id": job_id,
-        "session_id": session_id,
-        "status": "running",
-        "query": body.query,
-        "query_id": None,
-        "error": None,
-        "progress": None,
-        "events": [],
-    }
+        job_id = str(uuid.uuid4())
+        _JOBS[job_id] = {
+            "job_id": job_id,
+            "session_id": session_id,
+            "status": "running",
+            "query": body.query,
+            "query_id": None,
+            "error": None,
+            "progress": None,
+            "events": [],
+        }
 
     # Run the synchronous agent in the thread pool — never blocks the event loop.
     # asyncio.get_running_loop() is correct here (Python 3.10+): we are inside an
@@ -552,9 +573,10 @@ async def start_analysis(
 )
 def get_job_status(job_id: str):
     """Returns the current status of an analysis job. Suitable for polling."""
-    if job_id not in _JOBS:
-        raise HTTPException(status_code=404, detail="Job not found")
-    job = _JOBS[job_id]
+    with _JOBS_LOCK:
+        if job_id not in _JOBS:
+            raise HTTPException(status_code=404, detail="Job not found")
+        job = _JOBS[job_id]
     return JobStatusResponse(
         job_id=job_id,
         session_id=job["session_id"],
@@ -585,25 +607,29 @@ async def stream_job_progress(job_id: str):
     Replays all events emitted so far on connection, so late-connecting
     clients (e.g. page reload mid-analysis) catch up automatically.
     """
-    if job_id not in _JOBS:
-        raise HTTPException(status_code=404, detail="Job not found")
+    with _JOBS_LOCK:
+        if job_id not in _JOBS:
+            raise HTTPException(status_code=404, detail="Job not found")
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        job = _JOBS[job_id]
         sent_index = 0
 
         # Replay any events already emitted (handles late connect / page reload)
         while True:
-            events = job.get("events", [])
+            with _JOBS_LOCK:
+                job = _JOBS.get(job_id)
+                if job is None:
+                    return
+                events = list(job.get("events", []))
+                current_status = job["status"]
+
             while sent_index < len(events):
                 ev = events[sent_index]
                 yield _make_event(ev["type"], ev["data"])
                 sent_index += 1
 
             # If job is done and we've sent everything, close the stream
-            if job["status"] in ("complete", "error") and sent_index >= len(
-                job.get("events", [])
-            ):
+            if current_status in ("complete", "error") and sent_index >= len(events):
                 break
 
             # Yield a keepalive comment every second while waiting for more events

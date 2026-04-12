@@ -4,8 +4,8 @@
 #
 # Usage:
 #   docker build -t osint-agent -f Dockerfile.agent .
-#   docker run --rm -it -v ./data:/app/data osint-agent
-#   docker run --rm -it -v ./data:/app/data osint-agent --offline
+#   docker run --rm -it -v osint-agent-data:/app/data osint-agent
+#   docker run --rm -it -v osint-agent-data:/app/data osint-agent --offline
 #   docker compose --profile cli run --rm -T agent --stdin < query.json
 
 FROM python:3.11-slim
@@ -26,10 +26,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy ONLY the agent package
 COPY socialosintagent/ ./socialosintagent/
-
-# Run as non-root user
-RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
 
 # Use ENTRYPOINT so --stdin, --offline, etc., append properly
 ENTRYPOINT ["python", "-m", "socialosintagent.main"]

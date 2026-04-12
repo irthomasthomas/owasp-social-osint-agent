@@ -2,8 +2,8 @@
 
 const COLORS = ['#00e59b', '#47b3ff', '#ffb347', '#ff4d6a', '#a78bfa', '#f472b6', '#34d399', '#fbbf24'];
 const API = '/api/v1';
-const PANEL_ICONS = { report:'fa-file-lines', timeline:'fa-chart-bar', history:'fa-clock-rotate-left', contacts:'fa-address-book', entities:'fa-tags' };
-const PANEL_TITLES = { report:'Report', timeline:'Timeline', history:'History', contacts:'Contacts', entities:'Entities' };
+const PANEL_ICONS = { report: 'fa-file-lines', timeline: 'fa-chart-bar', history: 'fa-clock-rotate-left', contacts: 'fa-address-book', entities: 'fa-tags' };
+const PANEL_TITLES = { report: 'Report', timeline: 'Timeline', history: 'History', contacts: 'Contacts', entities: 'Entities' };
 const LS_LAYOUT_KEY = 'osint-agent-layout';
 
 const state = {
@@ -17,7 +17,7 @@ let panelZCounter = 10;
 let panelsInited = false;
 const SNAP_THRESHOLD = 15;
 const SNAP_PAD = 4;
-const ALL_PANELS = ['report','timeline','history','contacts','entities'];
+const ALL_PANELS = ['report', 'timeline', 'history', 'contacts', 'entities'];
 
 // ═══════════════ THEME ═══════════════
 function applyTheme(t) {
@@ -45,8 +45,8 @@ const apiPut = (p, b) => api('PUT', p, b);
 const apiDel = p => api('DELETE', p);
 
 // ═══════════════ UTILS ═══════════════
-function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'); }
-function fmtAge(iso) { if (!iso) return ''; const s = (Date.now() - new Date(iso)) / 1000; if (s < 60) return `${Math.round(s)}s ago`; if (s < 3600) return `${Math.round(s/60)}m ago`; if (s < 86400) return `${Math.round(s/3600)}h ago`; return `${Math.round(s/86400)}d ago`; }
+function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;'); }
+function fmtAge(iso) { if (!iso) return ''; const s = (Date.now() - new Date(iso)) / 1000; if (s < 60) return `${Math.round(s)}s ago`; if (s < 3600) return `${Math.round(s / 60)}m ago`; if (s < 86400) return `${Math.round(s / 3600)}h ago`; return `${Math.round(s / 86400)}d ago`; }
 function fmtDate(iso) { if (!iso) return ''; return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
 function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i); return Math.abs(h); }
 
@@ -81,11 +81,11 @@ function getDefaultGroups() {
     const hw = Math.round(rw2 * 0.48), cw2 = rw2 - hw - 12;
     const conh = Math.round(bh * 0.65), enh = bh - conh - 12;
     return [
-        { id:'g0', panels:['report'], active:'report', x:0, y:0, w:rw, h:ch },
-        { id:'g1', panels:['timeline'], active:'timeline', x:rw+12, y:0, w:rw2, h:th },
-        { id:'g2', panels:['history'], active:'history', x:rw+12, y:th+12, w:hw, h:bh },
-        { id:'g3', panels:['contacts'], active:'contacts', x:rw+12+hw+12, y:th+12, w:cw2, h:conh },
-        { id:'g4', panels:['entities'], active:'entities', x:rw+12+hw+12, y:th+12+conh+12, w:cw2, h:enh },
+        { id: 'g0', panels: ['report'], active: 'report', x: 0, y: 0, w: rw, h: ch },
+        { id: 'g1', panels: ['timeline'], active: 'timeline', x: rw + 12, y: 0, w: rw2, h: th },
+        { id: 'g2', panels: ['history'], active: 'history', x: rw + 12, y: th + 12, w: hw, h: bh },
+        { id: 'g3', panels: ['contacts'], active: 'contacts', x: rw + 12 + hw + 12, y: th + 12, w: cw2, h: conh },
+        { id: 'g4', panels: ['entities'], active: 'entities', x: rw + 12 + hw + 12, y: th + 12 + conh + 12, w: cw2, h: enh },
     ];
 }
 
@@ -98,7 +98,7 @@ function loadSavedGroups() {
         let groups = [], i = 0;
         for (const [pid, pos] of Object.entries(data || {})) {
             if (!pos || typeof pos.x !== 'number') continue;
-            groups.push({ id:'g'+(i++), panels:[pid], active:pid, x:pos.x, y:pos.y, w:pos.w, h:pos.collapsed?(pos.h||300):pos.h, collapsed:!!pos.collapsed, pinned:!!pos.pinned });
+            groups.push({ id: 'g' + (i++), panels: [pid], active: pid, x: pos.x, y: pos.y, w: pos.w, h: pos.collapsed ? (pos.h || 300) : pos.h, collapsed: !!pos.collapsed, pinned: !!pos.pinned });
         }
         return groups.length ? groups : null;
     } catch { return null; }
@@ -112,7 +112,7 @@ function savePanelLayout() {
         groups.push({
             id: el.dataset.groupId, panels, active: active || panels[0],
             x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth,
-            h: el.classList.contains('collapsed') ? (parseFloat(el.dataset.savedH)||300) : el.offsetHeight,
+            h: el.classList.contains('collapsed') ? (parseFloat(el.dataset.savedH) || 300) : el.offsetHeight,
             collapsed: el.classList.contains('collapsed'), pinned: el.dataset.pinned === 'true',
         });
     });
@@ -125,10 +125,10 @@ function buildGroupEl(g) {
     el.dataset.groupId = g.id;
     el.dataset.savedH = g.h || 300;
     if (g.pinned) el.dataset.pinned = 'true';
-    el.style.cssText = `left:${g.x}px;top:${g.y}px;width:${g.w}px;height:${g.collapsed?32:g.h}px;z-index:${++panelZCounter}`;
+    el.style.cssText = `left:${g.x}px;top:${g.y}px;width:${g.w}px;height:${g.collapsed ? 32 : g.h}px;z-index:${++panelZCounter}`;
 
-    ['n','ne','e','se','s','sw','w','nw'].forEach(d => {
-        const rh = document.createElement('div'); rh.className = 'pg-rh pg-rh-'+d; rh.dataset.dir = d; el.appendChild(rh);
+    ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].forEach(d => {
+        const rh = document.createElement('div'); rh.className = 'pg-rh pg-rh-' + d; rh.dataset.dir = d; el.appendChild(rh);
     });
 
     const dz = document.createElement('div'); dz.className = 'pg-drop-zone'; el.appendChild(dz);
@@ -139,7 +139,7 @@ function buildGroupEl(g) {
         const t = document.createElement('div');
         t.className = 'pg-tab' + (pid === g.active ? ' active' : '');
         t.dataset.panel = pid;
-        t.innerHTML = `<i class="fa-solid ${PANEL_ICONS[pid]||'fa-cube'}"></i><span class="pg-tab-label">${PANEL_TITLES[pid]||pid}</span>`;
+        t.innerHTML = `<i class="fa-solid ${PANEL_ICONS[pid] || 'fa-cube'}"></i><span class="pg-tab-label">${PANEL_TITLES[pid] || pid}</span>`;
         t.addEventListener('mousedown', e => startTabDrag(e, g.id, pid));
         tabBar.appendChild(t);
     });
@@ -212,7 +212,7 @@ function toggleGroupCollapse(groupId) {
     if (!el) return;
     el.classList.toggle('collapsed');
     if (!el.classList.contains('collapsed')) {
-        el.style.height = (parseFloat(el.dataset.savedH)||300) + 'px';
+        el.style.height = (parseFloat(el.dataset.savedH) || 300) + 'px';
     }
     savePanelLayout();
     const activeTab = el.querySelector('.pg-tab.active');
@@ -253,18 +253,18 @@ function calcSnap(el, newX, newY) {
     document.querySelectorAll('.panel-group').forEach(other => {
         if (other === el) return;
         const ox = other.offsetLeft, oy = other.offsetTop, ow = other.offsetWidth, oh = other.offsetHeight;
-        const oR = ox+ow, oB = oy+oh, nR = newX+pw, nB = newY+ph;
+        const oR = ox + ow, oB = oy + oh, nR = newX + pw, nB = newY + ph;
         if (snapX === null) {
-            if (Math.abs(newX-ox)<SNAP_THRESHOLD) snapX=ox;
-            else if (Math.abs(newX-oR)<SNAP_THRESHOLD) snapX=oR;
-            else if (Math.abs(nR-ox)<SNAP_THRESHOLD) snapX=ox-pw;
-            else if (Math.abs(nR-oR)<SNAP_THRESHOLD) snapX=oR-pw;
+            if (Math.abs(newX - ox) < SNAP_THRESHOLD) snapX = ox;
+            else if (Math.abs(newX - oR) < SNAP_THRESHOLD) snapX = oR;
+            else if (Math.abs(nR - ox) < SNAP_THRESHOLD) snapX = ox - pw;
+            else if (Math.abs(nR - oR) < SNAP_THRESHOLD) snapX = oR - pw;
         }
         if (snapY === null) {
-            if (Math.abs(newY-oy)<SNAP_THRESHOLD) snapY=oy;
-            else if (Math.abs(newY-oB)<SNAP_THRESHOLD) snapY=oB;
-            else if (Math.abs(nB-oy)<SNAP_THRESHOLD) snapY=oy-ph;
-            else if (Math.abs(nB-oB)<SNAP_THRESHOLD) snapY=oB-ph;
+            if (Math.abs(newY - oy) < SNAP_THRESHOLD) snapY = oy;
+            else if (Math.abs(newY - oB) < SNAP_THRESHOLD) snapY = oB;
+            else if (Math.abs(nB - oy) < SNAP_THRESHOLD) snapY = oy - ph;
+            else if (Math.abs(nB - oB) < SNAP_THRESHOLD) snapY = oB - ph;
         }
     });
 
@@ -273,9 +273,9 @@ function calcSnap(el, newX, newY) {
     const g = getOrCreateSnapGuide();
     if (snapX !== null || snapY !== null) {
         g.style.display = 'block';
-        if (snapX !== null && snapY !== null) { g.style.left=(snapX-1)+'px'; g.style.top=(snapY-1)+'px'; g.style.width='2px'; g.style.height='2px'; }
-        else if (snapX !== null) { g.style.left=(snapX-1)+'px'; g.style.top='0'; g.style.width='2px'; g.style.height=ch+'px'; }
-        else { g.style.left='0'; g.style.top=(snapY-1)+'px'; g.style.width=cw+'px'; g.style.height='2px'; }
+        if (snapX !== null && snapY !== null) { g.style.left = (snapX - 1) + 'px'; g.style.top = (snapY - 1) + 'px'; g.style.width = '2px'; g.style.height = '2px'; }
+        else if (snapX !== null) { g.style.left = (snapX - 1) + 'px'; g.style.top = '0'; g.style.width = '2px'; g.style.height = ch + 'px'; }
+        else { g.style.left = '0'; g.style.top = (snapY - 1) + 'px'; g.style.width = cw + 'px'; g.style.height = '2px'; }
     } else { g.style.display = 'none'; }
     return { x: newX, y: newY };
 }
@@ -286,8 +286,8 @@ function findMergeTarget(dragEl, x, y, w, h) {
     document.querySelectorAll('.panel-group').forEach(other => {
         if (other === dragEl) return;
         const ox = other.offsetLeft, oy = other.offsetTop, ow = other.offsetWidth, oh = other.offsetHeight;
-        const olX = Math.max(0, Math.min(x+w, ox+ow) - Math.max(x, ox));
-        const olY = Math.max(0, Math.min(y+h, oy+oh) - Math.max(y, oy));
+        const olX = Math.max(0, Math.min(x + w, ox + ow) - Math.max(x, ox));
+        const olY = Math.max(0, Math.min(y + h, oy + oh) - Math.max(y, oy));
         const area = olX * olY;
         if (area > bestArea) { bestArea = area; best = other; }
     });
@@ -310,7 +310,7 @@ function doMerge(srcEl, tgtEl) {
         const tab = document.createElement('div');
         tab.className = 'pg-tab';
         tab.dataset.panel = pid;
-        tab.innerHTML = `<i class="fa-solid ${PANEL_ICONS[pid]||'fa-cube'}"></i><span class="pg-tab-label">${PANEL_TITLES[pid]||pid}</span>`;
+        tab.innerHTML = `<i class="fa-solid ${PANEL_ICONS[pid] || 'fa-cube'}"></i><span class="pg-tab-label">${PANEL_TITLES[pid] || pid}</span>`;
         tab.addEventListener('mousedown', e => startTabDrag(e, tgtId, pid));
         tgtTabBar.appendChild(tab);
         populatePaneBody(tgtEl, pid);
@@ -333,8 +333,8 @@ function initGroupDrag(el) {
         if (!dragging) return;
         const canvas = document.getElementById('panelCanvas');
         const cw = canvas.clientWidth, ch = canvas.clientHeight, pw = el.offsetWidth, ph = el.offsetHeight;
-        let nx = Math.max(-pw+60, Math.min(cw-60, sL+cx-sx));
-        let ny = Math.max(0, Math.min(ch-20, sT+cy-sy));
+        let nx = Math.max(-pw + 60, Math.min(cw - 60, sL + cx - sx));
+        let ny = Math.max(0, Math.min(ch - 20, sT + cy - sy));
         const s = calcSnap(el, nx, ny);
         el.style.left = s.x + 'px'; el.style.top = s.y + 'px';
         hideMergeTargets();
@@ -390,7 +390,7 @@ function applyLinkedResize(neighbor, edge, dx, dy) {
     else if (edge === 'e') { W = Math.max(220, W + dx); }
     else if (edge === 'n') { const nh = Math.max(80, H - dy); T = T + H - nh; H = nh; }
     else if (edge === 's') { H = Math.max(80, H + dy); }
-    g.style.left = L+'px'; g.style.top = T+'px'; g.style.width = W+'px'; g.style.height = H+'px';
+    g.style.left = L + 'px'; g.style.top = T + 'px'; g.style.width = W + 'px'; g.style.height = H + 'px';
 }
 
 function initGroupResize(el) {
@@ -410,7 +410,7 @@ function initGroupResize(el) {
         if (dir.includes('w')) { const nw = Math.max(MIN_W, Math.min(st.sW - dx)); L = st.sL + st.sW - nw; W = nw; }
         if (dir.includes('s')) H = Math.max(MIN_H, Math.min(maxH - T, st.sH + dy));
         if (dir.includes('n') && !el.classList.contains('collapsed')) { const nh = Math.max(MIN_H, Math.min(st.sH - dy)); T = st.sT + st.sH - nh; H = nh; }
-        el.style.left = L+'px'; el.style.top = T+'px'; el.style.width = W+'px'; el.style.height = H+'px';
+        el.style.left = L + 'px'; el.style.top = T + 'px'; el.style.width = W + 'px'; el.style.height = H + 'px';
 
         const realDx = (L - st.sL) !== 0 ? (L + W) - (st.sL + st.sW) : W - st.sW;
         const realDy = (T - st.sT) !== 0 ? (T + H) - (st.sT + st.sH) : H - st.sH;
@@ -452,27 +452,27 @@ function startTabDrag(e, groupId, panelId) {
 
     function onM(ev) {
         lx = ev.clientX; ly = ev.clientY;
-        if (!detached && (Math.abs(lx-sx)>8 || Math.abs(ly-sy)>8)) {
+        if (!detached && (Math.abs(lx - sx) > 8 || Math.abs(ly - sy) > 8)) {
             detached = true;
             ghost = document.createElement('div');
             ghost.className = 'panel-group detach-ghost';
-            ghost.innerHTML = `<div class="pg-header"><div class="pg-tabs"><div class="pg-tab active"><i class="fa-solid ${PANEL_ICONS[panelId]||'fa-cube'}"></i><span class="pg-tab-label">${PANEL_TITLES[panelId]||panelId}</span></div></div></div>`;
+            ghost.innerHTML = `<div class="pg-header"><div class="pg-tabs"><div class="pg-tab active"><i class="fa-solid ${PANEL_ICONS[panelId] || 'fa-cube'}"></i><span class="pg-tab-label">${PANEL_TITLES[panelId] || panelId}</span></div></div></div>`;
             document.body.appendChild(ghost);
-            el.querySelectorAll('.pg-pane').forEach(p => { if (p.dataset.panel===panelId) p.style.display='none'; });
+            el.querySelectorAll('.pg-pane').forEach(p => { if (p.dataset.panel === panelId) p.style.display = 'none'; });
             const first = el.querySelector(`.pg-tab:not([data-panel="${panelId}"])`);
             if (first) switchTab(groupId, first.dataset.panel);
         }
         if (detached && ghost) {
-            ghost.style.left = (lx-150)+'px'; ghost.style.top = (ly-20)+'px';
+            ghost.style.left = (lx - 150) + 'px'; ghost.style.top = (ly - 20) + 'px';
             hideMergeTargets();
             const canvas = document.getElementById('panelCanvas');
             const r = canvas.getBoundingClientRect();
             document.querySelectorAll('.panel-group').forEach(g => {
                 if (g === el) return;
                 const gr = g.getBoundingClientRect();
-                const olX = Math.max(0, Math.min(lx, gr.right) - Math.max(lx-300, gr.left));
-                const olY = Math.max(0, Math.min(ly, gr.bottom) - Math.max(ly-200, gr.top));
-                if (olX*olY > 3000) showMergeTarget(g);
+                const olX = Math.max(0, Math.min(lx, gr.right) - Math.max(lx - 300, gr.left));
+                const olY = Math.max(0, Math.min(ly, gr.bottom) - Math.max(ly - 200, gr.top));
+                if (olX * olY > 3000) showMergeTarget(g);
             });
         }
     }
@@ -483,7 +483,7 @@ function startTabDrag(e, groupId, panelId) {
         if (!detached) { switchTab(groupId, panelId); return; }
         const canvas = document.getElementById('panelCanvas');
         const r = canvas.getBoundingClientRect();
-        const cx = lx-r.left, cy = ly-r.top;
+        const cx = lx - r.left, cy = ly - r.top;
         const mergeTarget = document.querySelector('.pg-drop-zone.show')?.closest('.panel-group');
         if (mergeTarget && mergeTarget !== el) {
             const pane = el.querySelector(`.pg-pane[data-panel="${panelId}"]`);
@@ -491,17 +491,17 @@ function startTabDrag(e, groupId, panelId) {
             pane.style.display = 'none';
             mergeTarget.querySelector('.pg-content').appendChild(pane);
             const nt = document.createElement('div'); nt.className = 'pg-tab'; nt.dataset.panel = panelId;
-            nt.innerHTML = `<i class="fa-solid ${PANEL_ICONS[panelId]||'fa-cube'}"></i><span class="pg-tab-label">${PANEL_TITLES[panelId]||panelId}</span>`;
+            nt.innerHTML = `<i class="fa-solid ${PANEL_ICONS[panelId] || 'fa-cube'}"></i><span class="pg-tab-label">${PANEL_TITLES[panelId] || panelId}</span>`;
             nt.addEventListener('mousedown', e2 => startTabDrag(e2, mergeTarget.dataset.groupId, panelId));
             mergeTarget.querySelector('.pg-tabs').appendChild(nt);
             tab.remove();
             populatePaneBody(mergeTarget, panelId);
             switchTab(mergeTarget.dataset.groupId, panelId);
         } else if (cx > 0 && cy > 0 && cx < r.width && cy < r.height) {
-            const nw = Math.min(400, r.width*0.4), nh = Math.min(300, r.height*0.4);
-            let nx = Math.max(0, Math.min(r.width-nw, cx-nw/2));
-            let ny = Math.max(0, Math.min(r.height-nh, cy-nh/2));
-            const newG = { id:'g'+Date.now(), panels:[panelId], active:panelId, x:Math.round(nx), y:Math.round(ny), w:Math.round(nw), h:Math.round(nh) };
+            const nw = Math.min(400, r.width * 0.4), nh = Math.min(300, r.height * 0.4);
+            let nx = Math.max(0, Math.min(r.width - nw, cx - nw / 2));
+            let ny = Math.max(0, Math.min(r.height - nh, cy - nh / 2));
+            const newG = { id: 'g' + Date.now(), panels: [panelId], active: panelId, x: Math.round(nx), y: Math.round(ny), w: Math.round(nw), h: Math.round(nh) };
             const newEl = buildGroupEl(newG);
             const autoPane = newEl.querySelector(`.pg-pane[data-panel="${panelId}"]`);
             if (autoPane) autoPane.remove();
@@ -525,7 +525,7 @@ function startTabDrag(e, groupId, panelId) {
 function populatePaneBody(groupEl, pid) {
     const pane = groupEl.querySelector(`.pg-pane[data-panel="${pid}"]`);
     if (!pane || pane.querySelector('.fp-body')) return;
-    const body = document.createElement('div'); body.className = 'fp-body'; body.id = 'fpBody_'+pid;
+    const body = document.createElement('div'); body.className = 'fp-body'; body.id = 'fpBody_' + pid;
     if (pid === 'report') body.innerHTML = '<div class="fp-scroll" id="fpReportMarkdown"></div>';
     else if (pid === 'timeline') body.innerHTML = `<div class="fp-scroll"><div class="timeline-section"><div class="timeline-title">Chronological Activity</div><div class="timeline-subtitle">Posts over time across all targets.</div><div id="fpChrono"></div></div><hr class="timeline-divider"><div class="timeline-section"><div class="timeline-title">Pattern of Life</div><div class="timeline-subtitle">Post frequency by day &times; hour (UTC).</div><div id="fpHeatmap"></div></div></div>`;
     else if (pid === 'history') body.innerHTML = '<div class="fp-scroll" id="fpHistory"></div>';
@@ -584,7 +584,7 @@ function renderSessions() {
         const isActive = state.currentSession?.session_id === s.session_id;
         return `<div class="session-item ${isActive ? 'active' : ''}" onclick="loadSession('${s.session_id}')">
             <div class="session-dot" style="background:${color}"></div>
-            <div class="session-info"><div class="session-name">${esc(s.name)}</div><div class="session-meta">${s.target_count || 0} target${(s.target_count||0)!==1?'s':''} · ${s.query_count || 0} report${(s.query_count||0)!==1?'s':''}</div></div>
+            <div class="session-info"><div class="session-name">${esc(s.name)}</div><div class="session-meta">${s.target_count || 0} target${(s.target_count || 0) !== 1 ? 's' : ''} · ${s.query_count || 0} report${(s.query_count || 0) !== 1 ? 's' : ''}</div></div>
             <button class="session-delete" onclick="event.stopPropagation();deleteSession('${s.session_id}')" title="Delete"><i class="fa-solid fa-xmark"></i></button>
         </div>`;
     }).join('');
@@ -651,10 +651,10 @@ function renderTargetsModal() {
     list.innerHTML = state.mtTargets.map((t, i) => `<div class="target-row"><span class="plat-badge">${esc(t.platform)}</span><span class="target-row-name">${esc(t.username)}</span><button class="target-row-remove" onclick="mtRemove(${i})">&times;</button></div>`).join('') || '<div style="font-size:11px;color:var(--fg-dim);padding:4px 0">No targets.</div>';
 }
 
-window.mtRemove = function(i) { state.mtTargets.splice(i, 1); renderTargetsModal(); };
-window.mtAdd = function() { const p = document.getElementById('mtPlatform').value; const u = document.getElementById('mtUsername').value.trim().replace(/^@/, ''); if (!u) return; if (state.mtTargets.find(t => t.platform === p && t.username === u)) return; state.mtTargets.push({ platform: p, username: u }); document.getElementById('mtUsername').value = ''; renderTargetsModal(); };
+window.mtRemove = function (i) { state.mtTargets.splice(i, 1); renderTargetsModal(); };
+window.mtAdd = function () { const p = document.getElementById('mtPlatform').value; const u = document.getElementById('mtUsername').value.trim().replace(/^@/, ''); if (!u) return; if (state.mtTargets.find(t => t.platform === p && t.username === u)) return; state.mtTargets.push({ platform: p, username: u }); document.getElementById('mtUsername').value = ''; renderTargetsModal(); };
 
-window.mtSave = async function() {
+window.mtSave = async function () {
     if (!state.mtTargets.length) { toast('Add at least one target', 'info'); return; }
     const platforms = {}; state.mtTargets.forEach(({ platform, username }) => { if (!platforms[platform]) platforms[platform] = []; platforms[platform].push(username); });
     try { const s = state.currentSession; await apiPut(`/sessions/${s.session_id}/targets`, { platforms, fetch_options: s.fetch_options }); s.platforms = platforms; closeModal('modalTargets'); await loadCacheStatus(); await refreshSessionList(); renderTargetChips(); renderPanelContacts(); if (state.activePage === 'contacts') renderContacts(); drawNetworkGraph(); toast('Targets updated'); } catch (e) { toast('Save failed: ' + e.message, 'error'); }
@@ -685,7 +685,7 @@ async function removeTarget(platform, username) {
     const s = state.currentSession; if (!s) return; const updated = JSON.parse(JSON.stringify(s.platforms || {}));
     if (Object.values(updated).reduce((sum, arr) => sum + arr.length, 0) <= 1) { toast('Session must have at least one target', 'error'); return; }
     if (!updated[platform]) return; updated[platform] = updated[platform].filter(u => u !== username); if (!updated[platform].length) delete updated[platform];
-    try { await apiPut(`/sessions/${s.session_id}/targets`, { platforms: updated, fetch_options: s.fetch_options }); s.platforms = updated; await loadCacheStatus(); await refreshSessionList();         renderTargetChips(); renderPanelContacts(); if (state.activePage === 'contacts') renderContacts(); drawNetworkGraph(); toast(`Removed ${platform}/${username}`, 'info'); } catch (e) { toast('Failed: ' + e.message, 'error'); }
+    try { await apiPut(`/sessions/${s.session_id}/targets`, { platforms: updated, fetch_options: s.fetch_options }); s.platforms = updated; await loadCacheStatus(); await refreshSessionList(); renderTargetChips(); renderPanelContacts(); if (state.activePage === 'contacts') renderContacts(); drawNetworkGraph(); toast(`Removed ${platform}/${username}`, 'info'); } catch (e) { toast('Failed: ' + e.message, 'error'); }
 }
 
 // ═══════════════ REPORT VIEW ═══════════════
@@ -773,12 +773,12 @@ function renderPanelContacts() {
     const s = state.currentSession; const maxW = Math.max(...contacts.map(c => c.weight), 1);
     list.innerHTML = contacts.map(c => {
         const bw = Math.max(8, Math.round(c.weight / maxW * 100));
-        const itypes = (c.interaction_types || []).map(t => `<span class="fp-itype ${t}">${esc(t.replace('_',' '))}</span>`).join('');
+        const itypes = (c.interaction_types || []).map(t => `<span class="fp-itype ${t}">${esc(t.replace('_', ' '))}</span>`).join('');
         const inSession = s && (s.platforms || {})[c.platform]?.includes(c.username);
         const btn = inSession
             ? `<button class="fp-contact-add in-session" disabled><i class="fa-solid fa-check"></i></button>`
             : `<button class="fp-contact-add" onclick="addContactToSession('${esc(c.platform)}','${esc(c.username)}')"><i class="fa-solid fa-plus"></i></button>`;
-        return `<div class="fp-contact-row"><div class="fp-contact-avatar">${esc(c.username.slice(0,2).toUpperCase())}</div><div class="fp-contact-info"><div class="fp-contact-name">${esc(c.username)}</div><div class="fp-contact-detail"><span class="fp-plat-badge">${esc(c.platform)}</span> ${itypes}</div></div><div class="fp-contact-weight"><div class="weight-bar-wrap"><div class="weight-bar" style="width:${bw}%"></div></div><span class="weight-num">${c.weight}</span></div>${btn}</div>`;
+        return `<div class="fp-contact-row"><div class="fp-contact-avatar">${esc(c.username.slice(0, 2).toUpperCase())}</div><div class="fp-contact-info"><div class="fp-contact-name">${esc(c.username)}</div><div class="fp-contact-detail"><span class="fp-plat-badge">${esc(c.platform)}</span> ${itypes}</div></div><div class="fp-contact-weight"><div class="weight-bar-wrap"><div class="weight-bar" style="width:${bw}%"></div></div><span class="weight-num">${c.weight}</span></div>${btn}</div>`;
     }).join('');
 }
 
@@ -806,8 +806,8 @@ function renderChrono(events) {
     svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h})`).call(d3.axisBottom(x).ticks(5));
     svg.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(4).tickFormat(d3.format('d')));
     const bw = Math.max(2, w / data.length - 1); const tooltip = d3.select('#d3Tooltip');
-    svg.selectAll('.bar').data(data).enter().append('rect').attr('class', 'bar').attr('x', d => x(d.date) - bw/2).attr('y', d => y(d.count)).attr('width', bw).attr('height', d => h - y(d.count))
-        .on('mouseover', (ev, d) => { tooltip.transition().duration(100).style('opacity', 1); tooltip.html(`<strong>${formatDate(d.date)}</strong><br>${d.count} posts`).style('left', (ev.clientX-30)+'px').style('top', (ev.clientY-48)+'px'); })
+    svg.selectAll('.bar').data(data).enter().append('rect').attr('class', 'bar').attr('x', d => x(d.date) - bw / 2).attr('y', d => y(d.count)).attr('width', bw).attr('height', d => h - y(d.count))
+        .on('mouseover', (ev, d) => { tooltip.transition().duration(100).style('opacity', 1); tooltip.html(`<strong>${formatDate(d.date)}</strong><br>${d.count} posts`).style('left', (ev.clientX - 30) + 'px').style('top', (ev.clientY - 48) + 'px'); })
         .on('mouseout', () => tooltip.transition().duration(200).style('opacity', 0));
 }
 
@@ -816,11 +816,11 @@ function renderHeatmapPanel(events) {
     if (!events.length) { el.innerHTML = '<div class="panel-empty" style="padding:16px 0">No activity data.</div>'; return; }
     const matrix = Array.from({ length: 7 }, () => Array(24).fill(0)); let mx = 1;
     events.forEach(e => { const dt = new Date(e.timestamp); matrix[dt.getUTCDay()][dt.getUTCHours()]++; if (matrix[dt.getUTCDay()][dt.getUTCHours()] > mx) mx = matrix[dt.getUTCDay()][dt.getUTCHours()]; });
-    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    let heatR='0',heatG='229',heatB='155';
-    try { const tmp = document.createElement('div'); tmp.style.color = getCssVar('--accent'); document.body.appendChild(tmp); const c = getComputedStyle(tmp).color; document.body.removeChild(tmp); const m = c.match(/\d+/g); if (m) { heatR=m[0]; heatG=m[1]; heatB=m[2]; } } catch {}
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    let heatR = '0', heatG = '229', heatB = '155';
+    try { const tmp = document.createElement('div'); tmp.style.color = getCssVar('--accent'); document.body.appendChild(tmp); const c = getComputedStyle(tmp).color; document.body.removeChild(tmp); const m = c.match(/\d+/g); if (m) { heatR = m[0]; heatG = m[1]; heatB = m[2]; } } catch { }
     let html = `<div class="heatmap-grid"><div style="grid-column:2/26;display:flex;justify-content:space-between;font-size:9px;color:var(--fg-dim);margin-bottom:4px"><span>00:00</span><span>12:00</span><span>23:00</span></div>`;
-    for (let d = 0; d < 7; d++) { html += `<div class="heatmap-label">${days[d]}</div>`; for (let h = 0; h < 24; h++) { const v = matrix[d][h]; const op = v === 0 ? 0.05 : Math.max(0.15, v / mx); html += `<div class="heatmap-cell" style="background:rgba(${heatR},${heatG},${heatB},${op})" title="${days[d]} ${String(h).padStart(2,'0')}:00 — ${v}"></div>`; } }
+    for (let d = 0; d < 7; d++) { html += `<div class="heatmap-label">${days[d]}</div>`; for (let h = 0; h < 24; h++) { const v = matrix[d][h]; const op = v === 0 ? 0.05 : Math.max(0.15, v / mx); html += `<div class="heatmap-cell" style="background:rgba(${heatR},${heatG},${heatB},${op})" title="${days[d]} ${String(h).padStart(2, '0')}:00 — ${v}"></div>`; } }
     html += '</div>'; el.innerHTML = html;
 }
 
@@ -850,12 +850,12 @@ function drawNetworkGraph() {
     svg.on('dblclick.zoom', null);
     graphZoom = { behavior: zoomBehavior, svg, zoomG };
 
-    const sim = d3.forceSimulation(nodes).force('link', d3.forceLink(validLinks).id(d => d.id).distance(50).strength(0.5)).force('charge', d3.forceManyBody().strength(-80)).force('center', d3.forceCenter(W/2, H/2)).force('collision', d3.forceCollide(14));
-    const link = zoomG.append('g').selectAll('line').data(validLinks).join('line').attr('class', 'graph-link').style('stroke-width', d => 0.5 + (d.weight/maxW)*1.8);
+    const sim = d3.forceSimulation(nodes).force('link', d3.forceLink(validLinks).id(d => d.id).distance(50).strength(0.5)).force('charge', d3.forceManyBody().strength(-80)).force('center', d3.forceCenter(W / 2, H / 2)).force('collision', d3.forceCollide(14));
+    const link = zoomG.append('g').selectAll('line').data(validLinks).join('line').attr('class', 'graph-link').style('stroke-width', d => 0.5 + (d.weight / maxW) * 1.8);
     const node = zoomG.append('g').selectAll('g').data(nodes).join('g').attr('class', d => d.type === 'source' ? 'node-source' : 'node-contact')
         .call(d3.drag().on('start', (ev, d) => { const t = d3.zoomTransform(svg.node()); if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('drag', (ev, d) => { const t = d3.zoomTransform(svg.node()); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
-    node.append('circle').attr('r', d => d.type === 'source' ? 9 : 5 + (d.weight||1)/maxW*4).style('fill', d => d.type === 'source' ? accentColor : bgRaised).style('stroke', d => d.type === 'source' ? bgSurface : borderMedium).style('stroke-width', d => d.type === 'source' ? '2.5px' : '1.5px');
-    node.append('text').attr('class', 'node-label').attr('dy', d => -(d.type==='source'?12:10)).attr('text-anchor', 'middle').style('fill', textSec).text(d => d.label.length > 11 ? d.label.slice(0,10)+'\u2026' : d.label);
+    node.append('circle').attr('r', d => d.type === 'source' ? 9 : 5 + (d.weight || 1) / maxW * 4).style('fill', d => d.type === 'source' ? accentColor : bgRaised).style('stroke', d => d.type === 'source' ? bgSurface : borderMedium).style('stroke-width', d => d.type === 'source' ? '2.5px' : '1.5px');
+    node.append('text').attr('class', 'node-label').attr('dy', d => -(d.type === 'source' ? 12 : 10)).attr('text-anchor', 'middle').style('fill', textSec).text(d => d.label.length > 11 ? d.label.slice(0, 10) + '\u2026' : d.label);
     sim.on('tick', () => { link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y); node.attr('transform', d => `translate(${d.x},${d.y})`); });
 
     const ctrl = document.createElement('div'); ctrl.className = 'graph-zoom-ctrl';
@@ -864,7 +864,7 @@ function drawNetworkGraph() {
 }
 
 function graphZoomIn() { if (!graphZoom) return; graphZoom.svg.transition().duration(250).call(graphZoom.behavior.scaleBy, 1.4); }
-function graphZoomOut() { if (!graphZoom) return; graphZoom.svg.transition().duration(250).call(graphZoom.behavior.scaleBy, 1/1.4); }
+function graphZoomOut() { if (!graphZoom) return; graphZoom.svg.transition().duration(250).call(graphZoom.behavior.scaleBy, 1 / 1.4); }
 function graphZoomReset() { if (!graphZoom) return; graphZoom.svg.transition().duration(350).call(graphZoom.behavior.transform, d3.zoomIdentity); }
 function graphSpread() { if (!graphZoom) return; graphZoom.svg.transition().duration(350).call(graphZoom.behavior.transform, d3.zoomIdentity); drawNetworkGraph(); }
 
@@ -881,27 +881,43 @@ function renderDashboard() {
     else { list.innerHTML = allReports.slice(0, 10).map(r => `<div class="report-list-item" onclick="loadSession('${r.sessionId}').then(()=>viewReportById('${r.query_id}'))"><div class="rli-icon platform-icon"><i class="fa-solid fa-feather"></i></div><div class="rli-info"><div class="rli-query">${esc(r.query)}</div><div class="rli-meta">${esc(r.sessionName)} · ${fmtDate(r.timestamp)}</div></div></div>`).join(''); }
     const sList = document.getElementById('dashSessionList'); if (!sList) return;
     if (!state.sessions.length) { sList.innerHTML = '<div class="empty-state" style="padding:30px 10px;"><i class="fa-solid fa-folder-open" style="font-size:28px;"></i><p>No sessions yet.</p></div>'; }
-    else { sList.innerHTML = state.sessions.map(s => { const targets = []; for (const [p, users] of Object.entries(s.platforms || {})) for (const u of users) targets.push({ platform: p, username: u }); return `<div class="dash-session-card" onclick="loadSession('${s.session_id}')"><div class="dsc-name">${esc(s.name)}</div><div class="dsc-meta">${targets.length} target${targets.length!==1?'s':''} · ${s.query_count||0} report${(s.query_count||0)!==1?'s':''}</div><div class="dsc-targets">${targets.slice(0,5).map(t=>`<span class="dsc-target">${esc(t.platform)}/${esc(t.username)}</span>`).join('')}${targets.length>5?`<span class="dsc-target">+${targets.length-5}</span>`:''}</div></div>`; }).join(''); }
+    else { sList.innerHTML = state.sessions.map(s => { const targets = []; for (const [p, users] of Object.entries(s.platforms || {})) for (const u of users) targets.push({ platform: p, username: u }); return `<div class="dash-session-card" onclick="loadSession('${s.session_id}')"><div class="dsc-name">${esc(s.name)}</div><div class="dsc-meta">${targets.length} target${targets.length !== 1 ? 's' : ''} · ${s.query_count || 0} report${(s.query_count || 0) !== 1 ? 's' : ''}</div><div class="dsc-targets">${targets.slice(0, 5).map(t => `<span class="dsc-target">${esc(t.platform)}/${esc(t.username)}</span>`).join('')}${targets.length > 5 ? `<span class="dsc-target">+${targets.length - 5}</span>` : ''}</div></div>`; }).join(''); }
 }
 
 // ═══════════════ ANALYSIS ═══════════════
+
+function lockQueryBar() {
+    const qi = document.getElementById('queryInput');
+    const runBtn = document.getElementById('btnRunAnalysis');
+    if (qi) { qi.disabled = true; qi.placeholder = 'Analysis in progress…'; }
+    if (runBtn) { runBtn.disabled = true; runBtn.classList.add('running'); }
+}
+
+function unlockQueryBar() {
+    const qi = document.getElementById('queryInput');
+    const runBtn = document.getElementById('btnRunAnalysis');
+    if (qi) { qi.disabled = false; qi.placeholder = 'Enter analysis query…'; }
+    if (runBtn) { runBtn.disabled = false; runBtn.classList.remove('running'); }
+}
+
 function runAnalysis() {
     if (!state.currentSession) { toast('Select or create a session first', 'error'); return; }
+    if (state.runningJobId) { toast('Analysis already in progress — wait for it to finish', 'info'); return; }
     const s = state.currentSession; const qi = document.getElementById('queryInput'); const query = (qi ? qi.value : '').trim();
     if (!query) { toast('Enter an analysis query', 'error'); qi && qi.focus(); return; }
-    if (qi) { qi.value = ''; qi.disabled = true; } const runBtn = document.getElementById('btnRunAnalysis'); if (runBtn) runBtn.disabled = true;
+    if (qi) qi.value = '';
+    lockQueryBar();
     setStatus(true, 'Starting...'); switchPage('progress'); document.getElementById('progressLog').innerHTML = ''; document.getElementById('progressStageLabel').textContent = 'Starting analysis...';
     apiPut(`/sessions/${s.session_id}/targets`, { platforms: s.platforms, fetch_options: s.fetch_options })
         .then(() => apiPost(`/sessions/${s.session_id}/analyse`, { query, force_refresh: false }))
         .then(job => { state.runningJobId = job.job_id; startProgressStream(job.job_id, query); })
-        .catch(e => { if (e.message.includes('already has a running')) toast('Analysis already running', 'info'); else toast('Failed: ' + e.message, 'error'); setStatus(false); switchPage('dashboard'); })
-        .finally(() => { if (qi) qi.disabled = false; if (runBtn) runBtn.disabled = false; });
+        .catch(e => { if (e.message.includes('already has a running')) toast('Analysis already running', 'info'); else toast('Failed: ' + e.message, 'error'); setStatus(false); unlockQueryBar(); switchPage('dashboard'); });
 }
 
 function startProgressStream(jobId, query) {
     appendLog('info', `Query: ${query}`); if (state.sseSource) state.sseSource.close();
     const es = new EventSource(`${API}/jobs/${jobId}/stream`); state.sseSource = es;
-    ['stage','log','status','complete','error'].forEach(t => { es.addEventListener(t, e => { try { handleJobEvent(t, JSON.parse(e.data), jobId); } catch {} }); });
+    ['stage', 'log', 'status', 'complete', 'error'].forEach(t => { es.addEventListener(t, e => { try { handleJobEvent(t, JSON.parse(e.data), jobId); } catch { } }); });
     es.onerror = () => { es.close(); pollJob(jobId); };
 }
 
@@ -909,7 +925,7 @@ function handleJobEvent(type, data) {
     if (type === 'stage') { document.getElementById('progressStageLabel').textContent = data.message || ''; appendLog('stage', `\u25b6 ${data.message}`); }
     else if (type === 'log' || type === 'status') appendLog('info', data.message);
     else if (type === 'complete') { appendLog('complete', '\u2713 Analysis complete'); finishAnalysis(); }
-    else if (type === 'error') { appendLog('error', `\u2717 ${data.message}`); setStatus(false); toast('Error: ' + data.message, 'error'); }
+    else if (type === 'error') { appendLog('error', `\u2717 ${data.message}`); state.runningJobId = null; unlockQueryBar(); setStatus(false); toast('Error: ' + data.message, 'error'); }
 }
 
 function appendLog(cls, msg) {
@@ -919,7 +935,7 @@ function appendLog(cls, msg) {
 }
 
 async function finishAnalysis() {
-    if (state.sseSource) { state.sseSource.close(); state.sseSource = null; } setStatus(false);
+    if (state.sseSource) { state.sseSource.close(); state.sseSource = null; } state.runningJobId = null; unlockQueryBar(); setStatus(false);
     try {
         const session = await apiGet(`/sessions/${state.currentSession.session_id}`); state.currentSession = session;
         await refreshSessionList(); await loadCacheStatus(); await loadContacts(); await loadMedia(); await loadTimeline(); renderTargetChips();
@@ -929,7 +945,7 @@ async function finishAnalysis() {
 }
 
 async function pollJob(jobId) {
-    const poll = async () => { try { const job = await apiGet(`/jobs/${jobId}`); if (job.status === 'complete') { finishAnalysis(); return; } if (job.status === 'error') { toast('Failed: ' + job.error, 'error'); setStatus(false); return; } if (job.progress?.message) document.getElementById('progressStageLabel').textContent = job.progress.message; setTimeout(poll, 2000); } catch { setTimeout(poll, 3000); } }; poll();
+    const poll = async () => { try { const job = await apiGet(`/jobs/${jobId}`); if (job.status === 'complete') { finishAnalysis(); return; } if (job.status === 'error') { state.runningJobId = null; unlockQueryBar(); setStatus(false); toast('Failed: ' + job.error, 'error'); return; } if (job.progress?.message) document.getElementById('progressStageLabel').textContent = job.progress.message; setTimeout(poll, 2000); } catch { setTimeout(poll, 3000); } }; poll();
 }
 
 // ═══════════════ CONTACTS (Full Page) ═══════════════
@@ -942,7 +958,7 @@ function renderContacts(filter) {
     const s = state.currentSession;
     document.getElementById('contactsGrid').innerHTML = contacts.map(c => {
         const initials = c.username.slice(0, 2).toUpperCase(); const color = COLORS[hashStr(c.platform + c.username) % COLORS.length];
-        const itypes = (c.interaction_types || []).map(t => `<span class="tag platform" style="font-size:9px;">${esc(t.replace('_',' '))}</span>`).join(' ');
+        const itypes = (c.interaction_types || []).map(t => `<span class="tag platform" style="font-size:9px;">${esc(t.replace('_', ' '))}</span>`).join(' ');
         const inSession = s && (s.platforms || {})[c.platform]?.includes(c.username);
         const actionBtn = inSession
             ? `<button class="topbar-btn" style="flex:1;justify-content:center;opacity:0.5;cursor:default;" disabled><i class="fa-solid fa-check"></i> In Session</button>`
@@ -958,7 +974,7 @@ function updateContactCardSize(val) {
     const label = document.getElementById('contactCardSizeLabel');
     if (grid) grid.style.setProperty('--card-min-width', val + 'px');
     if (label) label.textContent = val;
-    try { localStorage.setItem('osint_contact_card_size', val); } catch {}
+    try { localStorage.setItem('osint_contact_card_size', val); } catch { }
 }
 
 function restoreContactCardSize() {
@@ -968,7 +984,7 @@ function restoreContactCardSize() {
             const slider = document.getElementById('contactCardSize');
             if (slider) { slider.value = saved; updateContactCardSize(saved); }
         }
-    } catch {}
+    } catch { }
 }
 
 async function dismissContact(platform, username) { const s = state.currentSession; if (!s) return; try { await apiPost(`/sessions/${s.session_id}/contacts/dismiss`, { platform, username }); toast(`Dismissed ${username}`, 'info'); await loadContacts(); renderContacts(); renderPanelContacts(); } catch (e) { toast('Failed: ' + e.message, 'error'); } }
@@ -986,13 +1002,13 @@ function renderCache() {
     const filter = state.cacheFilter; const filtered = filter === 'all' ? state.cacheEntries : state.cacheEntries.filter(c => filter === 'fresh' ? c.is_fresh : !c.is_fresh);
     document.getElementById('cacheTotal').textContent = state.cacheEntries.length; document.getElementById('cacheHits').textContent = state.cacheEntries.filter(c => c.is_fresh).length; document.getElementById('cacheExpired').textContent = state.cacheEntries.filter(c => !c.is_fresh).length; document.getElementById('cacheCount').textContent = state.cacheEntries.length;
     if (!filtered.length) { document.getElementById('cacheList').innerHTML = `<div class="empty-state"><i class="fa-solid fa-database"></i><p>${filter !== 'all' ? 'No matches.' : 'Cache is empty.'}</p></div>`; return; }
-    document.getElementById('cacheList').innerHTML = filtered.map(c => `<div class="cache-item"><div class="ci-status ${c.is_fresh?'fresh':'stale'}"></div><div class="ci-info"><div class="ci-key">${esc(c.platform)} / ${esc(c.username)}</div><div class="ci-meta">${c.post_count} posts · ${c.media_found||0} media · ${c.media_analyzed||0} analyzed · ${fmtAge(c.cached_at)}</div></div><div class="ci-actions"><button class="ci-btn danger" onclick="deleteCacheEntry('${esc(c.platform)}_${esc(c.username)}')"><i class="fa-solid fa-trash"></i></button></div></div>`).join('');
+    document.getElementById('cacheList').innerHTML = filtered.map(c => `<div class="cache-item"><div class="ci-status ${c.is_fresh ? 'fresh' : 'stale'}"></div><div class="ci-info"><div class="ci-key">${esc(c.platform)} / ${esc(c.username)}</div><div class="ci-meta">${c.post_count} posts · ${c.media_found || 0} media · ${c.media_analyzed || 0} analyzed · ${fmtAge(c.cached_at)}</div></div><div class="ci-actions"><button class="ci-btn danger" onclick="deleteCacheEntry('${esc(c.platform)}_${esc(c.username)}')"><i class="fa-solid fa-trash"></i></button></div></div>`).join('');
 }
 
 function filterCache(filter) { state.cacheFilter = filter; renderCache(); }
 async function deleteCacheEntry(key) { if (!confirm('Delete?')) return; try { await apiPost('/cache/purge', { targets: ['specific'], keys: [key] }); await loadCacheStatus(); renderCache(); toast('Removed', 'info'); } catch (e) { toast('Failed: ' + e.message, 'error'); } }
-window.cachePurgeAll = async function() { if (!confirm('Purge all?')) return; try { await apiPost('/cache/purge', { targets: ['all'] }); await loadCacheStatus(); renderCache(); toast('Purged'); } catch (e) { toast('Failed: ' + e.message, 'error'); } };
-window.cachePurgeSelected = async function() { const keys = Array.from(document.querySelectorAll('.cache-cb:checked')).map(cb => cb.value); if (!keys.length) return; if (!confirm(`Delete ${keys.length}?`)) return; try { await apiPost('/cache/purge', { targets: ['specific'], keys }); await loadCacheStatus(); renderCache(); toast(`Purged ${keys.length}`); } catch (e) { toast('Failed: ' + e.message, 'error'); } };
+window.cachePurgeAll = async function () { if (!confirm('Purge all?')) return; try { await apiPost('/cache/purge', { targets: ['all'] }); await loadCacheStatus(); renderCache(); toast('Purged'); } catch (e) { toast('Failed: ' + e.message, 'error'); } };
+window.cachePurgeSelected = async function () { const keys = Array.from(document.querySelectorAll('.cache-cb:checked')).map(cb => cb.value); if (!keys.length) return; if (!confirm(`Delete ${keys.length}?`)) return; try { await apiPost('/cache/purge', { targets: ['specific'], keys }); await loadCacheStatus(); renderCache(); toast(`Purged ${keys.length}`); } catch (e) { toast('Failed: ' + e.message, 'error'); } };
 
 // ═══════════════ MEDIA (Full Page) ═══════════════
 async function loadMedia() { const s = state.currentSession; if (!s) { state.mediaItems = []; return; } try { const res = await apiGet(`/sessions/${s.session_id}/media`); state.mediaItems = res.media || []; document.getElementById('mediaCount').textContent = state.mediaItems.length; } catch { state.mediaItems = []; } }

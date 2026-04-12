@@ -138,8 +138,8 @@ class CacheManager:
                 logger.info(f"Cache hit and valid for {platform}/{username}")
                 return data
             else:
-                logger.info(f"Cache expired for {platform}/{username}. Discarding.")
-                # We don't delete the file here, as the fetcher will overwrite it.
+                logger.info(f"Cache expired for {platform}/{username}. Deleting stale file.")
+                cache_path.unlink(missing_ok=True)
                 return None
 
         except (json.JSONDecodeError, KeyError, FileNotFoundError) as e:
