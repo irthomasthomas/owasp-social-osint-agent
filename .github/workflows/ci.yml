@@ -26,11 +26,18 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install core agent dependencies
         run: pip install -r requirements-dev.txt
 
+      # Web server deps are needed because test_network_contacts.py uses
+      # FastAPI's TestClient to exercise the contacts REST API endpoints.
+      - name: Install web server dependencies
+        run: pip install -r requirements-web.txt
+
       - name: Create required runtime directories
-        run: mkdir -p data/cache data/media data/outputs logs
+        # data/sessions is new in develop — SessionManager creates it at
+        # runtime, but pre-creating it avoids any race on first test run.
+        run: mkdir -p data/cache data/media data/outputs data/sessions logs
 
       # Dummy values so the agent can initialise without real credentials.
       # Tests use mocks so none of these values touch a live API.

@@ -73,6 +73,23 @@ class UserData(TypedDict, total=False):
 logger = logging.getLogger("SocialOSINTAgent.utils")
 
 REQUEST_TIMEOUT = 20.0
+
+# Module-level persistent HTTP client with connection pooling.
+# Reusing a single client avoids the overhead of creating a new connection
+# for every media download. Thread-safe for concurrent requests.
+_shared_http_client: Optional[httpx.Client] = None
+
+
+def _get_http_client() -> httpx.Client:
+    """Returns a shared httpx.Client with connection pooling."""
+    global _shared_http_client
+    if _shared_http_client is None or _shared_http_client.is_closed:
+        _shared_http_client = httpx.Client(
+            follow_redirects=True,
+            timeout=REQUEST_TIMEOUT,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+    return _shared_http_client
 SUPPORTED_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif"]
 URL_REGEX = re.compile(r'((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:\'".,<>?«»“”‘’]))')
 
@@ -82,7 +99,7 @@ class DateTimeEncoder(json.JSONEncoder):
             return obj.isoformat()
         return super().default(obj)
 
-def get_sort_key(item: Dict[str, Any], dt_key: str) -> datetime:
+def get_sort_key(item: Any, dt_key: str) -> datetime:
     dt_val = item.get(dt_key)
     if isinstance(dt_val, str):
         try:
@@ -177,9 +194,9 @@ def download_media(base_dir: Path, url: str, is_offline: bool, platform: str, au
                 auth_headers["Authorization"] = f"Bearer {auth_details['access_jwt']}"
 
         headers = {"User-Agent": "SocialOSINTAgent", **auth_headers}
-        with httpx.Client(follow_redirects=True, timeout=REQUEST_TIMEOUT) as client:
-            resp = client.get(url, headers=headers)
-            resp.raise_for_status()
+        client = _get_http_client()
+        resp = client.get(url, headers=headers)
+        resp.raise_for_status()
 
         content_type = resp.headers.get("content-type", "").split(';')[0].strip()
         ext = valid_types.get(content_type)

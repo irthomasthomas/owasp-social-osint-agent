@@ -1,0 +1,39 @@
+# Dockerfile.web
+#
+# Self-contained web server image.
+#
+# Usage:
+#   docker compose up -d web          # build + start web server
+#   docker compose run --rm -it agent # run CLI interactively (separate build)
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# System packages needed by some Python deps (e.g. Pillow for image processing)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install core agent dependencies first (better layer caching)
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install web server dependencies (FastAPI, uvicorn, aiofiles, etc.)
+COPY requirements-web.txt ./requirements-web.txt
+RUN pip install --no-cache-dir -r requirements-web.txt
+
+# Copy the full agent package
+COPY socialosintagent/ ./socialosintagent/
+
+# Copy the static frontend
+COPY static/ ./static/
+
+# data/ is intentionally NOT copied - it is mounted at runtime as a volume
+
+EXPOSE 8000
+
+CMD ["uvicorn", "socialosintagent.web_server:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]

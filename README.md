@@ -1,10 +1,37 @@
-
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/bm-github/owasp-social-osint-agent)](https://github.com/bm-github/owasp-social-osint-agent/releases/latest)
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://bm-github.github.io/owasp-social-osint-agent/demo.html)
+
 # 🕵️ owasp-social-osint-agent
 
 **OWASP Social OSINT Agent** is an intelligent, autonomous agent designed for open-source intelligence (OSINT) investigations. It leverages both text and vision-capable Large Language Models (LLMs) via any OpenAI-compatible API to autonomously gather, analyze, and synthesize user activity across single or multiple social media platforms. The final output is a structured analytical report that turns scattered public data into coherent, actionable intelligence.
 
+The agent can be driven through a **web interface** (recommended) or a **command-line interface**, both backed by the same engine. Each interface has its own isolated data directory so they never share or overwrite each other's data.
+
+## 🎮 Live Demo
+
+**Try it instantly — no installation required.**
+
+[![OSINT Agent – Interactive Demo](https://img.shields.io/badge/Open%20Interactive%20Demo-%E2%86%92-38bdf8?style=for-the-badge&logo=github)](https://bm-github.github.io/owasp-social-osint-agent/demo.html)
+
+The [interactive demo](https://bm-github.github.io/owasp-social-osint-agent/demo.html) runs entirely in your browser with pre-loaded investigation data — no backend, no API keys, no Docker required. It showcases the full web UI including:
+
+- **Session management** with two pre-loaded example investigations
+- **Analysis reports** rendered from realistic mock OSINT data
+- **Network contact graph** (D3 force-directed) showing target relationships
+- **Chronological activity chart** and **Pattern of Life heatmap** (day × hour)
+- **Entity extraction** panel (locations, emails, crypto addresses, aliases)
+- **Media analysis** thumbnails with simulated vision-LLM annotations
+- **Live progress stream** simulation — run your own queries against the demo data
+
+> The demo uses pre-canned data to illustrate the interface. The real system performs live API fetching, LLM synthesis, vision analysis, and prompt-injection-hardened processing against actual social platforms.
+
 ## 🌟 Key Features
+
+✅ **Web Interface:** A browser-based UI at `http://localhost:8000` for managing sessions, running queries, and reviewing reports — no terminal required.
+
+✅ **Session Management:** Save and revisit named investigation sessions, each with their own target list, query history, and full report archive.
+
+✅ **Network Contact Discovery:** Automatically extracts and surfaces accounts your targets interact with (mentions, retweets, repo interactions) so you can expand an investigation without manual trawling. Discovered contacts can be dismissed or promoted directly to active targets from the web UI.
 
 ✅ **Multi-Platform Data Collection:** Aggregates data from Twitter/X, Reddit, Bluesky, GitHub, Hacker News, and Mastodon. Captures immutable identifiers (e.g., Bluesky DIDs) to ensure targets can be tracked even if they change their handles.
 
@@ -38,15 +65,100 @@
 
 ✅ **Intelligent Rate Limit Handling:** Detects API rate limits from social platforms and LLM providers, provides informative feedback, and prevents excessive requests.
 
-✅ **Robust Caching System:** Caches fetched text data for 24 hours (`data/cache/`) and media files (`data/media/`) to reduce API calls and speed up subsequent analyses. Vision analysis results are also cached.
+✅ **Robust Caching System:** Caches fetched text data for 24 hours (`data-web/cache/` or `data-agent/cache/`) and media files (`data-web/media/` or `data-agent/media/`) to reduce API calls and speed up subsequent analyses. Vision analysis results are also cached.
 
-✅ **Cache Management:** Interactive commands (`cache status`, `purge data`) to display a summary of all cached data or to purge specific types of data.
+✅ **Cache Management:** View a summary of all cached data or purge specific types from the web UI or interactive CLI commands.
 
 ✅ **Interactive CLI & Docker Support:** User-friendly command-line interface with rich formatting that runs both locally and within a fully containerized Docker environment.
 
 ✅ **Programmatic/Batch Mode:** Supports input via JSON from stdin for automated workflows (`--stdin`).
 
 ✅ **Secure Environment Variable Configuration:** All secrets and configurations are managed via a `.env` file.
+
+## 🌐 Web Interface
+
+The web interface provides a full browser-based investigation environment that requires no terminal interaction after startup.
+
+> **Want to see it before installing?** Check out the [interactive demo](https://bm-github.github.io/owasp-social-osint-agent/demo.html) — it runs in your browser with no setup required.
+
+### Starting the web server
+
+```bash
+docker compose up -d web
+```
+
+Then open `http://localhost:8000` in your browser. The image is built automatically on first run.
+
+### Web UI features at a glance
+
+**Sessions panel (left sidebar)**
+- Create named investigation sessions; each has its own target list, query history, and report archive
+- Sessions persist across server restarts — pick up where you left off
+- Rename sessions inline by clicking the title
+- Delete sessions you no longer need
+
+**Target chips bar**
+- Add or remove platforms/usernames at any time using the chip bar above the query input
+- Each chip shows a colour-coded freshness dot (green = fresh cache, amber = stale, grey = not yet fetched)
+- Clicking × on a chip removes that target from the session immediately
+
+**Query bar**
+- Type a natural language query and press **Run Analysis** (or `Ctrl+Enter`)
+- Set the number of posts to fetch per target with the **Posts** counter
+- Toggle **Force refresh** to bypass the 24-hour cache and re-fetch live data
+
+**Live progress stream**
+- Analysis progress streams to the browser in real time via Server-Sent Events
+- Each stage (data fetch → image analysis → LLM synthesis) is logged as it happens
+- If you reload the page mid-analysis the browser reconnects and replays all events so far
+
+**Report panel (centre)**
+- Reports render as styled Markdown with clickable image links
+- Switch between the **Report** tab and the **Timeline** tab at any time
+- **Download MD** saves the current report as a Markdown file
+- The full-session **Export Full Report** button produces a single consolidated Markdown document covering every query in the session, all extracted entities, and the top network contacts
+
+**Query history sidebar**
+- Every query and its full report is preserved in the session
+- Click any history entry to re-display its report without re-running the analysis
+
+**Timeline tab**
+- **Chronological Activity** — bar chart of post volume over calendar time using D3
+- **Pattern of Life** — day-of-week × hour-of-day heatmap (UTC) showing when targets are most active
+
+**Contacts panel (right panel, Contacts tab)**
+- Lists all accounts your targets mention, retweet, reply to, or interact with via repos
+- A force-directed network graph shows the relationships visually
+- Contacts are ranked by interaction weight
+- **+ button** promotes a contact to an active session target in one click
+- **× button** dismisses a contact; it will not reappear on subsequent loads (reversible)
+- Filter contacts by name or platform using the search box
+
+**Entities tab**
+- Extracts and displays structured intelligence selectors from the latest analysis: locations, email addresses, phone numbers, cryptocurrency addresses, and aliases
+
+**Media tab**
+- Shows thumbnails of all images downloaded for the current session's targets
+- Hover over a thumbnail to reveal the LLM vision analysis for that image
+
+**Cache manager**
+- Opened from the top bar **Cache** button
+- Shows every cached target with post count and freshness status
+- Select individual targets to purge, or wipe everything (cache + media + outputs) in one click
+
+### Remote access
+
+The server binds to `127.0.0.1:8000` (localhost only) by default. To access it from another machine, use an SSH tunnel:
+
+```bash
+ssh -L 8000:localhost:8000 user@your-server
+```
+
+Then open `http://localhost:8000` locally.
+
+### Authentication
+
+Set `OSINT_WEB_USER` and `OSINT_WEB_PASSWORD` in your `.env` file to enable HTTP Basic Auth. If these are not set the server runs open — only appropriate for localhost use via SSH tunnel.
 
 ## 🗺️ Visual Workflow: How the Agent Thinks
 
@@ -174,6 +286,36 @@ flowchart TD
 *Flowchart Description Note:* In **Offline Mode (`--offline`)**, the "Fetch Platform Data" step and the "Analyze Images" step are both *bypassed*. The analysis proceeds only with information already available in the local cache.
 </details>
 
+## 🏗️ Docker Architecture
+
+The project ships two container images, each with its own isolated data directory:
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  docker compose                                          │
+│                                                          │
+│  ┌─────────────────────┐   ┌─────────────────────────┐  │
+│  │  web (port 8000)     │   │  agent                  │  │
+│  │  Dockerfile.web      │   │  Dockerfile.agent       │  │
+│  │                     │   │                         │  │
+│  │  FastAPI + uvicorn  │   │  CLI (python -m …)      │  │
+│  │  + static frontend  │   │  --stdin / --offline     │  │
+│  │  runs as appuser    │   │  runs as appuser         │  │
+│  └────────┬────────────┘   └────────────┬────────────┘  │
+│           │                             │                │
+│           ▼                             ▼                │
+│     ./data-web/                  ./data-agent/           │
+│     ├── cache/                   ├── cache/              │
+│     ├── media/                   ├── media/              │
+│     ├── outputs/                 ├── outputs/            │
+│     └── sessions/                └──                     │
+└──────────────────────────────────────────────────────────┘
+```
+
+- **`web`** — Start with `docker compose up -d web`. Serves the browser UI and REST API. Runs on port 8000 (localhost only). Data stored in `./data-web/`.
+- **`agent`** — Run on-demand with `docker compose --profile cli run --rm -it agent` for interactive terminal sessions or batch/stdin processing. Uses the `cli` profile so it never starts unintentionally alongside the web server. Data stored in `./data-agent/`.
+- **Isolated data** — Each service has its own data directory so cached platform data, downloaded media, and saved reports are kept completely separate.
+
 ## 🛠 Installation
 
 ### Prerequisites
@@ -219,20 +361,15 @@ BLUESKY_APP_SECRET="xxxx-xxxx-xxxx-xxxx"
 # GitHub
 GITHUB_TOKEN="your_github_personal_access_token"
 # Mastodon Multi-Instance Support
-# Configure credentials for each Mastodon instance you want to access
-# The DEFAULT instance is used as a fallback when looking up users from unconfigured instances
-# Recommendation: Set a large, well-federated instance (like mastodon.social) as default
-
 MASTODON_INSTANCE_1_URL="https://mastodon.social"
 MASTODON_INSTANCE_1_TOKEN="YOUR_ACCESS_TOKEN_FOR_MASTODON_SOCIAL"
-MASTODON_INSTANCE_1_DEFAULT="true"  # Use this instance for cross-instance lookups
+MASTODON_INSTANCE_1_DEFAULT="true"
 
-# Add more instances as needed (increment the number)
-# MASTODON_INSTANCE_2_URL="https://infosec.exchange"
-# MASTODON_INSTANCE_2_TOKEN="YOUR_ACCESS_TOKEN_FOR_INFOSEC_EXCHANGE"
-
-# MASTODON_INSTANCE_3_URL="https://fosstodon.org"
-# MASTODON_INSTANCE_3_TOKEN="YOUR_ACCESS_TOKEN_FOR_FOSSTODON"
+# --- Optional: Web Interface Authentication ---
+# If set, the web UI will require HTTP Basic Auth.
+# Recommended whenever the server is accessible beyond localhost.
+OSINT_WEB_USER="your_username"
+OSINT_WEB_PASSWORD="your_password"
 
 # Security: Media Download Restrictions
 # By default, only trusted CDNs are allowed. Override with additional domains:
@@ -245,74 +382,187 @@ MASTODON_INSTANCE_1_DEFAULT="true"  # Use this instance for cross-instance looku
 
 ## 🚀 Usage
 
-There are two ways to run the agent: via Docker (recommended) or locally in a Python environment.
+There are three ways to run the agent: the **web interface**, the **interactive CLI**, or **programmatic/stdin mode**.
 
-### Recommended: Docker Mode
-This is the most stable and reproducible way to run the agent. It ensures all dependencies are handled correctly.
+### Recommended: Web Interface
 
-1.  **Build the Docker image:**
+The web interface provides a full browser-based UI for managing investigation sessions, running queries, and reviewing past reports.
+
+1. **Start the web server:**
     ```bash
-    docker-compose build
+    docker compose up -d web
     ```
-2.  **Run in Interactive Mode:**
-    This starts the interactive command-line interface.
+    This builds the image automatically on first run — no separate build step needed.
+
+2. **Open the interface:**
+    Navigate to `http://localhost:8000` in your browser.
+
+3. **Remote access:**
+    The server binds to `127.0.0.1` (localhost only) by default. To access it from another machine, use an SSH tunnel:
     ```bash
-    docker-compose run --rm social-osint-agent
+    ssh -L 8000:localhost:8000 user@your-server
     ```
-3.  **Run in Programmatic Mode (via Stdin):**
-    Pipe a JSON object to the agent for automated workflows.
-    ```bash
-    echo '{
-      "platforms": { "hackernews": ["pg"], "github": ["torvalds"] },
-      "query": "What are the primary technical interests and contributions of these users?"
-    }' | docker-compose run --rm -T social-osint-agent --stdin
-    ```
+    Then open `http://localhost:8000` locally.
+
+4. **Authentication:**
+    Set `OSINT_WEB_USER` and `OSINT_WEB_PASSWORD` in your `.env` file to enable HTTP Basic Auth. If these are not set, the server runs open — only appropriate for localhost use.
+
+### Docker CLI (Interactive)
+
+For terminal-based use, the `agent` service runs the original interactive CLI. It uses the `cli` profile so it is excluded from `docker compose up` and must be run on-demand:
+
+```bash
+# Interactive session (fetches live data)
+docker compose --profile cli run --rm -it agent
+
+# Offline mode — uses only cached data, no network requests
+docker compose --profile cli run --rm -it agent --offline
+
+# Override log level inside the container
+docker compose --profile cli run --rm -it agent --log-level DEBUG
+
+# Allow media downloads from non-standard CDNs
+docker compose --profile cli run --rm -it agent --unsafe-allow-external-media
+```
+
+Offline mode is useful for reviewing previously fetched data without making any API calls. The agent stores its data in `./data-agent/`, completely separate from the web server's `./data-web/`.
+
+### Docker CLI (Programmatic / Stdin)
+
+You can pipe a JSON file directly to the agent for automated workflows. *Note the use of the `-T` flag, which is required when piping data into a Docker container.*
+
+```bash
+docker compose --profile cli run --rm -T agent --stdin < input.json
+```
+
+*Example `input.json`:*
+```json
+{
+  "platforms": {
+    "twitter": ["twitterhandle"],
+    "github": ["torvalds"]
+  },
+  "query": "What are the primary technical interests and contributions of these users?",
+  "fetch_options": {
+    "default_count": 50
+  }
+}
+```
+
+*You can also pipe directly via `echo`:*
+```bash
+echo '{
+  "platforms": { "hackernews": ["pg"] },
+  "query": "Summary?"
+}' | docker compose --profile cli run --rm -T agent --stdin
+```
+
+### The Wrapper Script
+If typing `docker compose ...` gets tedious, create a small executable script in your project folder to make the Docker container feel exactly like a native Python CLI.
+
+Create a file named `osint` (no extension):
+```bash
+#!/bin/bash
+# If data is being piped in (like a file), use -T. Otherwise use -it for interactive.
+if [ -t 0 ]; then
+    docker compose --profile cli run --rm -it agent "$@"
+else
+    docker compose --profile cli run --rm -T agent "$@"
+fi
+```
+Make it executable:
+```bash
+chmod +x osint
+```
+Now you can run the tool beautifully:
+```bash
+./osint                             # Interactive menu
+./osint --offline                   # Interactive menu in offline mode
+./osint --stdin < query.json        # Automated JSON mode
+```
 
 ### Local Development Mode
-This is useful for development and debugging if you prefer not to use Docker.
 
-1.  **Create a Virtual Environment (Recommended):**
+Useful for development and debugging without Docker.
+
+1. **Create a virtual environment:**
     ```bash
     python -m venv .venv
-    source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
+    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     ```
-2.  **Install Dependencies:**
+2. **Install dependencies:**
     ```bash
+    pip install -r requirements.txt -r requirements-web.txt
+    # For running tests, also install:
     pip install -r requirements-dev.txt
     ```
-3.  **Run the Agent:**
-    (Ensure your `.env` file is in the project root)
+3. **Run the web server:**
+    ```bash
+    uvicorn socialosintagent.web_server:app --host 127.0.0.1 --port 8000 --reload
+    ```
+4. **Or run the CLI agent:**
     ```bash
     python -m socialosintagent.main
     ```
 
-### Command-line Arguments
+### Command-line Arguments (CLI only)
 *   `--stdin`: Read analysis configuration from standard input as a JSON object.
 *   `--format [json|markdown]`: Specifies the output format when saving results (default: `markdown`).
 *   `--no-auto-save`: Disable automatic saving of reports.
 *   `--log-level [DEBUG|INFO|WARNING|ERROR|CRITICAL]`: Set the logging level (default: `WARNING`).
 *   `--offline`: Run in offline mode. Uses only cached data.
-*   `--unsafe-allow-external-media`: **Security:** Allow downloading media from domains outside of known social media CDNs (e.g., personal servers or third-party websites).
+*   `--unsafe-allow-external-media`: **Security:** Allow downloading media from domains outside of known social media CDNs.
 
-### Special Commands (Interactive Mode)
+### Special Commands (Interactive CLI Mode)
 Within the analysis session, you can use these commands instead of an analysis query:
-*   `/loadmore [<platform/user>] <count>`: Fetch additional items for a target. If the target is unambiguous, you can omit `<platform/user>`.
+*   `/loadmore [<platform/user>] <count>`: Fetch additional items for a target.
 *   `/refresh`: Re-fetch data for all targets, ignoring the 24-hour cache.
+*   `/add <platform/user[/count]>`: Add a new target to the current session.
+*   `/remove <platform/user>`: Remove a target from the current session.
+*   `/status`: Show all active targets with post counts and cache freshness.
 *   `/help`: Displays available commands.
 *   `/exit`: Returns to the main platform selection menu.
-**Note:** Commands can be prefixed with `/` for clarity (e.g., `/help`, `/exit`), though the unprefixed versions still work for backward compatibility.
 
 ## ⚡ Cache System
-*   **Text/API Data:** Fetched platform data is cached for **24 hours** in `data/cache/` as JSON files.
-*   **Media Files:** Downloaded images and media are stored in `data/media/`.
+*   **Text/API Data:** Fetched platform data is cached for **24 hours** as JSON files (`data-web/cache/` for web, `data-agent/cache/` for CLI).
+*   **Media Files:** Downloaded images and media are stored in `data-web/media/` or `data-agent/media/`.
 *   **Vision Analysis:** AI-generated image analyses are saved back into the corresponding user's cache file, preventing re-analysis of the same image.
-*   Use the `refresh` command in interactive mode to force a re-fetch of text data. Use "Purge Data" to clear media files.
+*   Each service has its own isolated data directory — cached data is not shared between web and CLI.
+*   Use `/refresh` in the CLI or the "force refresh" toggle in the web UI to bypass the cache. Use "Purge All" in the web UI or "Purge Data" in the CLI to clear media files.
 
 ## 🤖 AI Analysis Details
 *   **Efficient Architecture:** The agent uses a two-phase process. It first rapidly collects all text data and downloads media from all specified targets. Only after this data gathering is complete does it begin the vision analysis phase.
+*   **Post-Bound Evidence:** Text and image analyses are kept together as atomic evidence units in the LLM prompt. A post saying "going on holiday" paired with a beach photo conveys different intelligence than the same text paired with a military facility — splitting text and vision into separate blocks would lose that binding.
 *   **Externalized Prompts:** All prompts used to guide the LLM are stored in the `socialosintagent/prompts/` directory, allowing for easy customization without changing code.
-*   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt, preventing the LLM from making temporal errors due to its fixed knowledge cutoff date.
+*   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt.
 *   **Data Synthesis:** The final analysis is performed by an LLM guided by a detailed system prompt. It synthesizes insights from the user's text, image analyses, and shared domain summary to build a comprehensive profile.
+*   **Intelligence Selectors:** At the end of each analysis the LLM extracts structured selectors (locations, emails, phone numbers, cryptocurrency addresses, aliases) into a dedicated JSON block, which is surfaced separately in the web UI Entities panel.
+
+## 🌐 REST API
+
+The web server exposes a versioned REST API at `/api/v1/` that powers the frontend. The same endpoints are available for programmatic or headless use. Interactive documentation is served at `/api/docs` (Swagger UI) and `/api/redoc`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/platforms` | List configured platforms and their availability |
+| `GET` | `/api/v1/sessions` | List all sessions (summaries) |
+| `POST` | `/api/v1/sessions` | Create a new session |
+| `GET` | `/api/v1/sessions/{id}` | Get full session (includes query history) |
+| `DELETE` | `/api/v1/sessions/{id}` | Delete a session |
+| `PATCH` | `/api/v1/sessions/{id}/rename` | Rename a session |
+| `PUT` | `/api/v1/sessions/{id}/targets` | Replace session targets |
+| `POST` | `/api/v1/sessions/{id}/analyse` | Start an analysis job (returns `job_id`) |
+| `GET` | `/api/v1/jobs/{job_id}` | Poll job status |
+| `GET` | `/api/v1/jobs/{job_id}/stream` | SSE stream of live job progress |
+| `GET` | `/api/v1/sessions/{id}/contacts` | Discovered network contacts |
+| `POST` | `/api/v1/sessions/{id}/contacts/dismiss` | Dismiss a contact |
+| `POST` | `/api/v1/sessions/{id}/contacts/undismiss` | Restore a dismissed contact |
+| `GET` | `/api/v1/sessions/{id}/timeline` | Post timestamps for charting |
+| `GET` | `/api/v1/sessions/{id}/media` | Downloaded media paths and analyses |
+| `GET` | `/api/v1/sessions/{id}/media/file` | Serve a local media file |
+| `GET` | `/api/v1/sessions/{id}/export` | Export full session as JSON |
+| `GET` | `/api/v1/cache` | Cache status (all entries) |
+| `POST` | `/api/v1/cache/purge` | Purge cache/media/outputs |
 
 ## 🛡️ Error Handling & Resilience
 - **Individual Target Failures**: If one user's data can't be fetched (deleted account, rate limit, permissions), analysis continues for other targets
@@ -321,8 +571,12 @@ Within the analysis session, you can use these commands instead of an analysis q
 - **Partial Results**: You'll receive analysis based on whatever data was successfully collected, with clear indication of any failures
 
 ## 🔒 Security Considerations
-*   **API Keys:** All secrets should be stored in the `.env` file. This file should be secured and **never** committed to version control.
-*   **Data Caching:** Fetched data and downloaded media are stored locally in the `data/` directory. Be mindful of the sensitivity of the data being analyzed and secure the directory appropriately.
+*   **API Keys:** All secrets should be stored in the `.env` file and **never** committed to version control.
+*   **Web Authentication:** Set `OSINT_WEB_USER` and `OSINT_WEB_PASSWORD` to enable Basic Auth on the web interface. Without these, the server runs open — only suitable for localhost access via SSH tunnel.
+*   **Network Exposure:** The web server binds to `127.0.0.1` by default. Do not change this to `0.0.0.0` on a public server without also enabling authentication and placing it behind a reverse proxy with TLS.
+*   **Container Hardening:** Both Docker images run as a non-root `appuser` user. Platform names and usernames are validated against an allow-list and sanitized before being used in file paths to prevent directory traversal.
+*   **Media Downloads:** By default, images are only downloaded from known platform CDNs. Use `--unsafe-allow-external-media` (CLI) or the equivalent fetch option to override this when targets use custom hosting.
+*   **Data Caching:** Fetched data and downloaded media are stored locally in `data-web/` (web) and `data-agent/` (CLI). Secure these directories appropriately given the sensitivity of the subjects being investigated.
 *   **Terms of Service:** Ensure your use of the tool complies with the Terms of Service of each social media platform and your chosen LLM API provider.
 
 ## 🤝 Contributing

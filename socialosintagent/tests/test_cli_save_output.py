@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
-from socialosintagent.analyzer import SocialOSINTAgent
+from socialosintagent.analyzer import AgentConfig, SocialOSINTAgent
 from socialosintagent.cache import CacheManager
 from socialosintagent.cli_handler import CliHandler
 from socialosintagent.client_manager import ClientManager
@@ -43,11 +43,12 @@ def cli_handler(monkeypatch, tmp_path):
     monkeypatch.setenv("IMAGE_ANALYSIS_MODEL", "test_vision_model")
     monkeypatch.setenv("ANALYSIS_MODEL", "test_text_model")
 
-    args = argparse.Namespace(
+    config = AgentConfig(
         offline=False,
         no_auto_save=False,
-        format="markdown",
+        output_format="markdown",
         unsafe_allow_external_media=False,
+        base_dir=tmp_path,
     )
     mock_cache = create_autospec(CacheManager, instance=True)
     with patch("socialosintagent.llm._load_prompt", return_value="mock prompt"):
@@ -55,10 +56,10 @@ def cli_handler(monkeypatch, tmp_path):
     mock_cm = create_autospec(ClientManager, instance=True)
     mock_cm.get_available_platforms.return_value = ["hackernews"]
 
-    agent_instance = SocialOSINTAgent(args, mock_cache, mock_llm, mock_cm)
-    agent_instance.base_dir = tmp_path
+    agent_instance = SocialOSINTAgent(config, mock_cache, mock_llm, mock_cm)
     (tmp_path / "outputs").mkdir(parents=True, exist_ok=True)
 
+    args = argparse.Namespace(offline=False, no_auto_save=False, format="markdown")
     cli = CliHandler(agent_instance, args)
     cli.console = MagicMock()
     cli.base_dir = tmp_path
@@ -66,20 +67,17 @@ def cli_handler(monkeypatch, tmp_path):
 
 
 class TestCliSaveOutput:
-
     def test_saves_markdown_file(self, cli_handler):
-        """Saves a .md file containing the report text."""
         cli, base = cli_handler
-        cli._save_output(SAMPLE_RESULT, "markdown")
+        path = cli.agent.save_report(SAMPLE_RESULT, "markdown")
 
         outputs = list((base / "outputs").glob("*.md"))
         assert len(outputs) == 1
         assert "# OSINT Analysis Report" in outputs[0].read_text(encoding="utf-8")
 
     def test_saves_json_file(self, cli_handler):
-        """Saves a .json file with the expected top-level keys."""
         cli, base = cli_handler
-        cli._save_output(SAMPLE_RESULT, "json")
+        path = cli.agent.save_report(SAMPLE_RESULT, "json")
 
         outputs = list((base / "outputs").glob("*.json"))
         assert len(outputs) == 1
@@ -87,11 +85,8 @@ class TestCliSaveOutput:
         assert "analysis_metadata" in data
         assert "analysis_report_markdown" in data
 
-    def test_prints_confirmation_to_console(self, cli_handler):
-        """Console.print is called with a message referencing the saved path."""
-        cli, _ = cli_handler
-        cli._save_output(SAMPLE_RESULT, "markdown")
-
-        cli.console.print.assert_called()
-        printed = " ".join(str(c) for c in cli.console.print.call_args_list)
-        assert "saved" in printed.lower() or "analysis" in printed.lower()
+    def test_save_report_returns_path(self, cli_handler):
+        cli, base = cli_handler
+        path = cli.agent.save_report(SAMPLE_RESULT, "markdown")
+        assert path.exists()
+        assert "saved" in path.name.lower() or "analysis" in path.name.lower()

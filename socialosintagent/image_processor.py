@@ -22,6 +22,7 @@ logger = logging.getLogger("SocialOSINTAgent.image_processor")
 
 class ProcessingStatus(Enum):
     """Status of image processing operations."""
+
     SUCCESS = "success"
     DOWNLOAD_FAILED = "download_failed"
     PREPROCESSING_FAILED = "preprocessing_failed"
@@ -34,6 +35,7 @@ class ProcessingStatus(Enum):
 @dataclass
 class ImageProcessingResult:
     """Result of processing a single image."""
+
     url: str
     status: ProcessingStatus
     local_path: Optional[Path] = None
@@ -44,7 +46,7 @@ class ImageProcessingResult:
 class ImageProcessor:
     """
     Handles all image processing operations with graceful error handling.
-    
+
     Features:
     - Resilient downloading with retries
     - Safe image preprocessing (format conversion, resizing)
@@ -57,36 +59,46 @@ class ImageProcessor:
         max_dimension: int = 1536,
         jpeg_quality: int = 85,
         request_timeout: float = 20.0,
+        base_dir: Optional[Path] = None,
     ):
-        """
-        Initialize the image processor.
-        
-        Args:
-            max_dimension: Maximum width/height for resized images
-            jpeg_quality: JPEG compression quality (1-100)
-            request_timeout: HTTP request timeout in seconds
-        """
         self.max_dimension = max_dimension
         self.jpeg_quality = jpeg_quality
         self.request_timeout = request_timeout
+        self.base_dir = base_dir or Path("data")
         self.logger = logger
+        self._cleanup_stale_temp_files()
+
+    def _cleanup_stale_temp_files(self):
+        """Remove orphaned .processed.jpg files left behind by previous crashes."""
+        media_dir = self.base_dir / "media"
+        if not media_dir.exists():
+            return
+        cleaned = 0
+        for temp_file in media_dir.glob("*.processed.jpg"):
+            try:
+                temp_file.unlink(missing_ok=True)
+                cleaned += 1
+            except OSError:
+                pass
+        if cleaned:
+            self.logger.info(f"Cleaned up {cleaned} stale .processed.jpg temp file(s)")
 
     def preprocess_image(
         self, file_path: Path, output_path: Optional[Path] = None
     ) -> Optional[Path]:
         """
         Safely preprocess an image file.
-        
+
         Operations:
         - Convert to RGB (if needed)
         - Extract first frame (for animated images)
         - Resize to max dimension
         - Convert to JPEG
-        
+
         Args:
             file_path: Path to the input image
             output_path: Optional output path (defaults to .processed.jpg)
-            
+
         Returns:
             Path to processed image, or None on failure
         """
@@ -107,18 +119,24 @@ class ImageProcessor:
                 # Handle animated images (extract first frame)
                 img_to_process = img
                 if getattr(img, "is_animated", False):
-                    self.logger.debug(f"Extracting first frame from animated image: {file_path}")
+                    self.logger.debug(
+                        f"Extracting first frame from animated image: {file_path}"
+                    )
                     img.seek(0)
                     img_to_process = img.copy()
 
                 # Convert to RGB if needed
-                if img_to_process.mode in ('RGBA', 'LA') or (img_to_process.mode == 'P' and 'transparency' in img_to_process.info):
+                if img_to_process.mode in ("RGBA", "LA") or (
+                    img_to_process.mode == "P" and "transparency" in img_to_process.info
+                ):
                     # Create a white background
-                    background = Image.new('RGB', img_to_process.size, (255, 255, 255))
+                    background = Image.new("RGB", img_to_process.size, (255, 255, 255))
                     # Paste the image on top using alpha channel as mask
-                    if img_to_process.mode == 'P':
-                        img_to_process = img_to_process.convert('RGBA')
-                    background.paste(img_to_process, mask=img_to_process.split()[3]) # 3 is alpha
+                    if img_to_process.mode == "P":
+                        img_to_process = img_to_process.convert("RGBA")
+                    background.paste(
+                        img_to_process, mask=img_to_process.split()[3]
+                    )  # 3 is alpha
                     img_to_process = background
                 elif img_to_process.mode != "RGB":
                     img_to_process = img_to_process.convert("RGB")
@@ -127,8 +145,8 @@ class ImageProcessor:
                 original_size = img_to_process.size
                 if max(img_to_process.size) > self.max_dimension:
                     img_to_process.thumbnail(
-                        (self.max_dimension, self.max_dimension), 
-                        Image.Resampling.LANCZOS
+                        (self.max_dimension, self.max_dimension),
+                        Image.Resampling.LANCZOS,
                     )
                     self.logger.debug(
                         f"Resized image from {original_size} to {img_to_process.size}"
@@ -157,10 +175,10 @@ class ImageProcessor:
     def encode_image_to_base64(self, file_path: Path) -> Optional[str]:
         """
         Encode an image file to base64.
-        
+
         Args:
             file_path: Path to the image file
-            
+
         Returns:
             Base64-encoded string, or None on failure
         """
@@ -185,18 +203,18 @@ class ImageProcessor:
     ) -> ImageProcessingResult:
         """
         Process a single image through the full pipeline.
-        
+
         Args:
             file_path: Path to the image file
             analyze_func: Optional function to analyze the preprocessed image
             source_url: Original URL of the image
             context: Context for analysis
-            
+
         Returns:
             ImageProcessingResult with status and data
         """
         url = source_url or str(file_path)
-        
+
         # Validate file exists
         if not file_path.exists():
             return ImageProcessingResult(
@@ -233,7 +251,7 @@ class ImageProcessor:
         # Perform analysis
         try:
             analysis = analyze_func(processed_path, source_url=url, context=context)
-            
+
             # Clean up temporary processed file
             if processed_path != file_path and processed_path.exists():
                 processed_path.unlink()
@@ -268,11 +286,8 @@ class ImageProcessor:
             # Clean up
             if processed_path != file_path and processed_path.exists():
                 processed_path.unlink()
-            
-            self.logger.error(
-                f"Error analyzing image {file_path}: {e}", 
-                exc_info=True
-            )
+
+            self.logger.error(f"Error analyzing image {file_path}: {e}", exc_info=True)
             return ImageProcessingResult(
                 url=url,
                 status=ProcessingStatus.ANALYSIS_FAILED,

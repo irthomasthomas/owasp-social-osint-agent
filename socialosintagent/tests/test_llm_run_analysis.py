@@ -7,7 +7,7 @@ Covers:
 - Literal {current_timestamp} placeholder is not sent to the API
 - Substituted timestamp matches YYYY-MM-DD HH:MM:SS UTC format
 - User query is wrapped in <user_query> XML tags
-- Collected text data is wrapped in <text_evidence> XML tags
+- Collected text data is wrapped in <evidence> XML tags
 - Security warnings are accumulated when post content contains injection patterns
 - Security Anomalies section is appended to report when warnings are present
 - security_warnings_accumulated is reset between successive run_analysis() calls
@@ -136,13 +136,19 @@ class TestRunAnalysisPromptConstruction:
         assert "</user_query>" in user_content
 
     def test_text_evidence_wrapped_in_xml_tag(self, online_analyzer, clean_platforms_data):
-        """Collected text data must be wrapped in <text_evidence>...</text_evidence>."""
+        """Collected text data must be wrapped in <evidence>...</evidence>.
+
+        The tag was renamed from <text_evidence> to <evidence> when the
+        architecture moved to post-bound inline image analysis. Vision evidence
+        is now inline within each post's evidence unit rather than in a separate
+        block, so a single <evidence> wrapper covers both text and image data.
+        """
         captured = _stub_client(online_analyzer)
         online_analyzer.run_analysis(clean_platforms_data, "summarise")
 
         user_content = next(m["content"] for m in captured if m["role"] == "user")
-        assert "<text_evidence>" in user_content
-        assert "</text_evidence>" in user_content
+        assert "<evidence>" in user_content
+        assert "</evidence>" in user_content
 
     def test_security_warnings_accumulated_on_injected_data(
         self, online_analyzer, injected_platforms_data
@@ -157,7 +163,8 @@ class TestRunAnalysisPromptConstruction:
     ):
         """When warnings are accumulated the report must include a Security Anomalies section."""
         _stub_client(online_analyzer, response_text="Normal analysis output.")
-        report = online_analyzer.run_analysis(injected_platforms_data, "summarise")
+        # run_analysis returns a (report_str, entities_dict) tuple — unpack correctly.
+        report, _entities = online_analyzer.run_analysis(injected_platforms_data, "summarise")
         assert "Security Anomalies" in report
 
     def test_warnings_reset_between_calls(

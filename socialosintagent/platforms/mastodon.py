@@ -3,7 +3,8 @@ from typing import Any, List, Optional, Tuple
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from .base_fetcher import BaseFetcher
-from ..utils import (NormalizedMedia, NormalizedPost, NormalizedProfile, download_media, extract_and_resolve_urls)
+from ..utils import (NormalizedMedia, NormalizedPost, NormalizedProfile,
+                     SAFE_CDN_DOMAINS, download_media, extract_and_resolve_urls)
 
 logger = logging.getLogger("SocialOSINTAgent.platforms.mastodon")
 
@@ -36,39 +37,43 @@ class MastodonFetcher(BaseFetcher):
     def _normalize(self, status: Any, profile: NormalizedProfile, **kwargs) -> NormalizedPost:
         cache = kwargs.get("cache")
         allow_ext = kwargs.get("allow_external_media", False)
-        
-        # Extract the instance domain to trust it dynamically
+
+        # Extract the instance domain to trust it dynamically.
+        # This was previously imported inside the for loop below (on every
+        # iteration), which is both inefficient and semantically misleading.
+        # SAFE_CDN_DOMAINS is now imported at module level alongside the
+        # other utils imports.
         user_instance_domain = profile["username"].split('@')[1].lower() if '@' in profile["username"] else None
-        
+
         cleaned_text = BeautifulSoup(status["content"], "html.parser").get_text(separator=" ", strip=True)
         media_items = []
-        
+
         for att in status.get("media_attachments", []):
             media_url = att["url"]
             media_domain = urlparse(media_url).netloc.lower()
-            
-            # Import the global list from utils
-            from ..utils import SAFE_CDN_DOMAINS
-            
-            # Check Dynamic Trust (Matches the user's home server)
+
+            # Check Dynamic Trust (matches the user's home server)
             is_internal_host = False
             if user_instance_domain:
-                is_internal_host = media_domain == user_instance_domain or media_domain.endswith(f".{user_instance_domain}")
-            
-            # Check Static Trust (Matches the list in utils.py)
+                is_internal_host = (
+                    media_domain == user_instance_domain
+                    or media_domain.endswith(f".{user_instance_domain}")
+                )
+
+            # Check Static Trust (matches the list in utils.py)
             is_globally_safe = any(
-                media_domain == d or media_domain.endswith(f".{d}") 
+                media_domain == d or media_domain.endswith(f".{d}")
                 for d in SAFE_CDN_DOMAINS.get("mastodon", [])
             )
-            
-            # Download is allowed if ANY of these are true:
+
+            # Download is allowed if ANY of these are true
             effective_allow_external = allow_ext or is_internal_host or is_globally_safe
-            
+
             if path := download_media(
-                cache.base_dir, 
-                media_url, 
-                cache.is_offline, 
-                "mastodon", 
+                cache.base_dir,
+                media_url,
+                cache.is_offline,
+                "mastodon",
                 allow_external=effective_allow_external
             ):
                 media_items.append(NormalizedMedia(url=media_url, local_path=str(path), type=att["type"]))

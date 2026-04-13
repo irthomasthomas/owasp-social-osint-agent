@@ -1,17 +1,74 @@
+# docker-compose.yml
+#
+# Two services with separate named volumes:
+#
+#   web    — FastAPI web server.
+#             docker compose up -d web
+#             Serves the frontend at http://localhost:8000
+#             and the REST API at http://localhost:8000/api/v1/
+#             Data stored in the osint-web-data volume.
+#
+#   agent  — CLI agent, for interactive/one-shot use.
+#             docker compose --profile cli run --rm -it agent
+#             Data stored in the osint-agent-data volume.
+#             Uses the "cli" profile so it never starts with `docker compose up`.
+#
+# Authentication:
+#   The web service binds to 127.0.0.1:8000 (localhost only).
+#   For remote access use an SSH tunnel:
+#     ssh -L 8000:localhost:8000 user@your-server
+#   Set OSINT_WEB_USER and OSINT_WEB_PASSWORD in .env to enable Basic Auth.
+#
+# Required environment variables (in .env):
+#   LLM_API_KEY, LLM_API_BASE_URL, ANALYSIS_MODEL, IMAGE_ANALYSIS_MODEL
+#
+# Optional platform credentials (in .env):
+#   TWITTER_BEARER_TOKEN, REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET,
+#   GITHUB_TOKEN, BLUESKY_IDENTIFIER, BLUESKY_APP_SECRET
+#
+# Optional web auth (in .env):
+#   OSINT_WEB_USER, OSINT_WEB_PASSWORD
+
 services:
-  social-osint-agent:
-    # Build the image from the Dockerfile in the current directory
-    build: .
-    # Name the image for easier management
-    image: social-osint-agent:latest
-    # Mount the local 'data' directory into the container at /app/data
-    # This ensures cache, media, and reports persist outside the container.
+
+  # ── Web server ─────────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: osint-agent-web:latest
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    # Load environment variables from the .env file
-    env_file:
-      - .env
-    # Required for the interactive CLI prompt to work correctly
-    tty: true
+      - osint-web-data:/app/data
+    env_file: .env
+    working_dir: /app
+    ports:
+      - "127.0.0.1:8000:8000"       # Localhost only. Use SSH tunnel for remote access.
+    restart: unless-stopped
+    healthcheck:
+      test: [
+        "CMD", "python", "-c",
+        "import urllib.request, sys; urllib.request.urlopen('http://localhost:8000/api/v1/platforms', timeout=5) or sys.exit(1)"
+      ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── CLI agent ──────────────────────────────────────────────────────────
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    image: osint-agent:latest
+    volumes:
+      - osint-agent-data:/app/data
+    env_file: .env
+    working_dir: /app
     stdin_open: true
+    tty: true
+    profiles:
+      - cli                         # Excluded from `docker compose up` by default.
+
+volumes:
+  osint-web-data:
+  osint-agent-data:

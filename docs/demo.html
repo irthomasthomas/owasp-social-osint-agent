@@ -1,0 +1,4056 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social OSINT Agent — Demo</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        :root,
+        [data-theme="dark"] {
+            --bg: #0a0c0f;
+            --bg-elevated: #11141a;
+            --bg-card: #161b24;
+            --bg-card-hover: #1c222d;
+            --fg: #e2e8f0;
+            --fg-muted: #6b7a8d;
+            --fg-dim: #3d4a5c;
+            --accent: #00e59b;
+            --accent-dim: rgba(0, 229, 155, 0.12);
+            --accent-mid: rgba(0, 229, 155, 0.3);
+            --danger: #ff4d6a;
+            --danger-dim: rgba(255, 77, 106, 0.12);
+            --warning: #ffb347;
+            --warning-dim: rgba(255, 179, 71, 0.12);
+            --info: #47b3ff;
+            --info-dim: rgba(71, 179, 255, 0.12);
+            --border: #1e2736;
+            --border-light: #2a3548;
+            --radius: 8px;
+            --radius-lg: 12px;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+            --font-mono: 'JetBrains Mono', monospace;
+            --font-ui: 'Space Grotesk', sans-serif;
+            --topbar-bg: rgba(10, 12, 15, 0.85);
+            --scanline-opacity: 0.015;
+            --glow-accent: rgba(0, 229, 155, 0.04);
+            --glow-info: rgba(71, 179, 255, 0.03);
+            --node-source: #00e59b;
+            --edge-color: rgba(0, 229, 155, 0.3);
+            --travel-color: rgba(0, 229, 155, 0.5);
+        }
+
+        [data-theme="light"] {
+            --bg: #f0f2f6;
+            --bg-elevated: #ffffff;
+            --bg-card: #ffffff;
+            --bg-card-hover: #e8ecf3;
+            --fg: #0d1117;
+            --fg-muted: #3a4259;
+            --fg-dim: #6e788a;
+            --accent: #1d56d8;
+            --accent-dim: rgba(29, 86, 216, 0.08);
+            --accent-mid: rgba(29, 86, 216, 0.2);
+            --danger: #c8202a;
+            --danger-dim: rgba(200, 32, 42, 0.08);
+            --warning: #b45309;
+            --warning-dim: rgba(180, 83, 9, 0.08);
+            --info: #1d56d8;
+            --info-dim: rgba(29, 86, 216, 0.08);
+            --border: #dde2eb;
+            --border-light: #c8cedb;
+            --shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            --topbar-bg: rgba(240, 242, 246, 0.88);
+            --scanline-opacity: 0.008;
+            --glow-accent: rgba(29, 86, 216, 0.03);
+            --glow-info: rgba(29, 86, 216, 0.02);
+            --node-source: #1d56d8;
+            --edge-color: rgba(29, 86, 216, 0.25);
+            --travel-color: rgba(29, 86, 216, 0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-ui);
+            background: var(--bg);
+            color: var(--fg);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: -200px;
+            right: -200px;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--glow-accent) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            bottom: -300px;
+            left: -200px;
+            width: 700px;
+            height: 700px;
+            background: radial-gradient(circle, var(--glow-info) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-light);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--fg-dim);
+        }
+
+        .scanline-overlay {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 9998;
+            background: repeating-linear-gradient(0deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(0, 0, 0, var(--scanline-opacity)) 2px,
+                    rgba(0, 0, 0, var(--scanline-opacity)) 4px);
+        }
+
+        .app-layout {
+            display: flex;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        .sidebar {
+            width: 280px;
+            min-width: 280px;
+            background: var(--bg-elevated);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+
+        .sidebar-logo .icon-wrap {
+            width: 36px;
+            height: 36px;
+            background: var(--accent-dim);
+            border: 1px solid var(--accent-mid);
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+            font-size: 16px;
+        }
+
+        .sidebar-logo h1 {
+            font-family: var(--font-mono);
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--fg);
+        }
+
+        .sidebar-logo span {
+            font-size: 10px;
+            color: var(--fg-muted);
+            letter-spacing: 0.5px;
+        }
+
+        .sidebar-logo span a {
+            color: inherit;
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+
+        .sidebar-logo span a:hover {
+            color: var(--accent);
+            text-decoration: underline;
+        }
+
+        .sidebar-section {
+            padding: 16px 12px 8px;
+        }
+
+        .sidebar-section-title {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--fg-dim);
+            padding: 0 8px;
+            margin-bottom: 8px;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 12px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--fg-muted);
+            position: relative;
+            margin-bottom: 2px;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-card);
+            color: var(--fg);
+        }
+
+        .nav-item.active {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 20px;
+            background: var(--accent);
+            border-radius: 0 3px 3px 0;
+        }
+
+        .nav-item i {
+            width: 18px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .nav-item .count {
+            margin-left: auto;
+            background: var(--bg-card);
+            color: var(--fg-dim);
+            font-size: 10px;
+            padding: 2px 7px;
+            border-radius: 10px;
+            font-family: var(--font-mono);
+        }
+
+        .nav-item.active .count {
+            background: var(--accent-mid);
+            color: var(--accent);
+        }
+
+        .session-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-size: 12px;
+            color: var(--fg-muted);
+            margin-bottom: 2px;
+            position: relative;
+        }
+
+        .session-item:hover {
+            background: var(--bg-card);
+            color: var(--fg);
+        }
+
+        .session-item.active {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .session-item .session-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .session-item .session-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .session-item .session-name {
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .session-item .session-meta {
+            font-size: 10px;
+            color: var(--fg-dim);
+            font-family: var(--font-mono);
+        }
+
+        .session-item .session-delete {
+            opacity: 0;
+            background: none;
+            border: none;
+            color: var(--danger);
+            cursor: pointer;
+            padding: 4px;
+            font-size: 11px;
+            transition: opacity 0.15s;
+        }
+
+        .session-item:hover .session-delete {
+            opacity: 0.7;
+        }
+
+        .session-item .session-delete:hover {
+            opacity: 1;
+        }
+
+        .sidebar-footer {
+            padding: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .btn-new-session {
+            width: 100%;
+            padding: 10px;
+            background: var(--accent-dim);
+            border: 1px dashed var(--accent-mid);
+            color: var(--accent);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-family: var(--font-ui);
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-new-session:hover {
+            background: var(--accent-mid);
+            border-style: solid;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--topbar-bg);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 28px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-shrink: 0;
+        }
+
+        .topbar-search {
+            flex: 1;
+            max-width: 600px;
+            position: relative;
+        }
+
+        .topbar-search input {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            padding: 10px 16px 10px 40px;
+            border-radius: var(--radius);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .topbar-search input::placeholder {
+            color: var(--fg-dim);
+        }
+
+        .topbar-search input:focus {
+            border-color: var(--accent);
+        }
+
+        .topbar-search i {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--fg-dim);
+            font-size: 13px;
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .topbar-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--fg-muted);
+            padding: 8px 12px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: var(--font-ui);
+        }
+
+        .topbar-btn:hover {
+            background: var(--bg-card-hover);
+            color: var(--fg);
+            border-color: var(--border-light);
+        }
+
+        .topbar-btn.primary {
+            background: var(--accent);
+            color: var(--bg);
+            border-color: var(--accent);
+            font-weight: 600;
+        }
+
+        .topbar-btn.primary:hover {
+            opacity: 0.9;
+        }
+
+        .topbar-btn:disabled {
+            opacity: 0.42;
+            cursor: not-allowed;
+        }
+
+        .status-dot-running {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--warning);
+            animation: dotBlink 1.5s ease-in-out infinite;
+        }
+
+        @keyframes dotBlink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .page {
+            display: none;
+            padding: 28px;
+            animation: fadeIn 0.25s ease;
+        }
+
+        .page.active {
+            display: block;
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+        }
+
+        #page-report.active {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            padding: 16px;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .dash-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            transition: border-color 0.2s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--border-light);
+        }
+
+        .stat-card .stat-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--fg-dim);
+            margin-bottom: 8px;
+        }
+
+        .stat-card .stat-value {
+            font-family: var(--font-mono);
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--fg);
+            line-height: 1;
+        }
+
+        .dash-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dash-section-title i {
+            color: var(--fg-dim);
+            font-size: 14px;
+        }
+
+        .recent-reports {
+            margin-bottom: 28px;
+        }
+
+        .report-list-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px 20px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .report-list-item:hover {
+            border-color: var(--accent-mid);
+            background: var(--bg-card-hover);
+        }
+
+        .report-list-item .rli-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .report-list-item .rli-icon.platform-icon {
+            background: var(--info-dim);
+            color: var(--info);
+        }
+
+        .report-list-item .rli-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .report-list-item .rli-query {
+            font-family: var(--font-mono);
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .report-list-item .rli-meta {
+            font-size: 11px;
+            color: var(--fg-dim);
+            margin-top: 2px;
+        }
+
+        .tag {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tag.platform {
+            background: var(--info-dim);
+            color: var(--info);
+        }
+
+        .report-header {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .report-header-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .report-query {
+            font-family: var(--font-mono);
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--fg);
+            margin-bottom: 4px;
+        }
+
+        .report-query code {
+            color: var(--accent);
+        }
+
+        .report-meta-row {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        .report-meta-item {
+            font-size: 12px;
+            color: var(--fg-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .report-meta-item i {
+            color: var(--fg-dim);
+            font-size: 11px;
+        }
+
+        .report-meta-item strong {
+            color: var(--fg);
+            font-weight: 500;
+        }
+
+        .report-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .report-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+
+        .report-section h3 {
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .report-section h3 .section-num {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--accent);
+            background: var(--accent-dim);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .report-section p {
+            font-size: 13px;
+            line-height: 1.7;
+            color: var(--fg-muted);
+            margin-bottom: 12px;
+        }
+
+        .report-section p:last-child {
+            margin-bottom: 0;
+        }
+
+        .report-section strong {
+            color: var(--fg);
+        }
+
+        .report-section code {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            background: var(--bg-elevated);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--accent);
+            border: 1px solid var(--border);
+        }
+
+        .markdown-report {
+            line-height: 1.7;
+        }
+
+        .markdown-report h1,
+        .markdown-report h2,
+        .markdown-report h3 {
+            color: var(--fg);
+            margin: 20px 0 10px;
+            font-weight: 700;
+        }
+
+        .markdown-report h1 {
+            font-size: 18px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
+
+        .markdown-report h2 {
+            font-size: 15px;
+            color: var(--accent);
+        }
+
+        .markdown-report h3 {
+            font-size: 13px;
+        }
+
+        .markdown-report p {
+            color: var(--fg-muted);
+            margin-bottom: 10px;
+        }
+
+        .markdown-report ul,
+        .markdown-report ol {
+            margin: 0 0 10px 20px;
+        }
+
+        .markdown-report li {
+            color: var(--fg-muted);
+            line-height: 1.75;
+            margin-bottom: 4px;
+        }
+
+        .markdown-report strong {
+            color: var(--fg);
+        }
+
+        .markdown-report code {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--accent);
+        }
+
+        .markdown-report pre {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 13px 15px;
+            overflow-x: auto;
+            margin: 0 0 13px;
+        }
+
+        .markdown-report pre code {
+            background: none;
+            border: none;
+            padding: 0;
+        }
+
+        .markdown-report blockquote {
+            border-left: 3px solid var(--accent);
+            padding: 7px 13px;
+            margin: 0 0 11px;
+            background: var(--accent-dim);
+            border-radius: 0 var(--radius) var(--radius) 0;
+        }
+
+        .markdown-report hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 18px 0;
+        }
+
+        .markdown-report a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .markdown-report a:hover {
+            text-decoration: underline;
+        }
+
+        .markdown-report table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 13px;
+            border-radius: var(--radius);
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .markdown-report th {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--fg-dim);
+            background: var(--bg-elevated);
+            padding: 7px 11px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        .markdown-report td {
+            padding: 7px 11px;
+            color: var(--fg-muted);
+            font-size: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .markdown-report tr:last-child td {
+            border-bottom: none;
+        }
+
+        .selector-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .selector-table th {
+            text-align: left;
+            padding: 8px 12px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--fg-dim);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .selector-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--fg-muted);
+            font-family: var(--font-mono);
+            font-size: 11px;
+        }
+
+        .selector-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .sel-type {
+            font-family: var(--font-ui);
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .sel-type.location {
+            background: var(--danger-dim);
+            color: var(--danger);
+        }
+
+        .sel-type.account {
+            background: var(--info-dim);
+            color: var(--info);
+        }
+
+        .sel-type.entity {
+            background: var(--warning-dim);
+            color: var(--warning);
+        }
+
+        .sel-type.digital {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .section-toggle {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: var(--fg-dim);
+            cursor: pointer;
+            padding: 4px;
+            font-size: 11px;
+            transition: transform 0.2s;
+        }
+
+        .report-section.collapsed .section-toggle {
+            transform: rotate(-90deg);
+        }
+
+        .report-section.collapsed .section-body {
+            display: none;
+        }
+
+        .dash-columns {
+            display: flex;
+            gap: 20px;
+        }
+
+        .dash-col-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .dash-col-side {
+            width: 340px;
+            flex-shrink: 0;
+        }
+
+        .dash-session-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .dash-session-card:hover {
+            border-color: var(--accent-mid);
+            background: var(--bg-card-hover);
+        }
+
+        .dash-session-card .dsc-name {
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        .dash-session-card .dsc-meta {
+            font-size: 11px;
+            color: var(--fg-dim);
+            font-family: var(--font-mono);
+        }
+
+        .dash-session-card .dsc-targets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        .dash-session-card .dsc-target {
+            font-size: 9px;
+            background: var(--accent-dim);
+            color: var(--accent);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-family: var(--font-mono);
+        }
+
+        .contacts-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .contacts-search {
+            flex: 1;
+            max-width: 400px;
+            position: relative;
+        }
+
+        .contacts-search input {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            font-family: var(--font-mono);
+            font-size: 12px;
+            padding: 9px 14px 9px 36px;
+            border-radius: var(--radius);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .contacts-search input:focus {
+            border-color: var(--accent);
+        }
+
+        .contacts-search i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--fg-dim);
+            font-size: 12px;
+        }
+
+        .contacts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 12px;
+        }
+
+        .contact-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            transition: all 0.15s;
+            cursor: pointer;
+        }
+
+        .contact-card:hover {
+            border-color: var(--border-light);
+            background: var(--bg-card-hover);
+        }
+
+        .contact-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .contact-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .contact-card-header .ch-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .contact-card-header .ch-handle {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--fg-dim);
+        }
+
+        .contact-details {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .contact-detail {
+            font-size: 11px;
+            color: var(--fg-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .contact-detail i {
+            color: var(--fg-dim);
+            width: 14px;
+            text-align: center;
+            font-size: 11px;
+        }
+
+        .contact-card-footer {
+            display: flex;
+            gap: 6px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .cache-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .cache-stat {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            text-align: center;
+        }
+
+        .cache-stat .cs-value {
+            font-family: var(--font-mono);
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .cache-stat .cs-label {
+            font-size: 11px;
+            color: var(--fg-dim);
+            margin-top: 4px;
+        }
+
+        .cache-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .cache-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .cache-item .ci-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .cache-item .ci-status.fresh {
+            background: var(--accent);
+            box-shadow: 0 0 8px rgba(0, 229, 155, 0.4);
+        }
+
+        .cache-item .ci-status.stale {
+            background: var(--warning);
+        }
+
+        .cache-item .ci-info {
+            flex: 1;
+        }
+
+        .cache-item .ci-key {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--fg);
+            word-break: break-all;
+        }
+
+        .cache-item .ci-meta {
+            font-size: 10px;
+            color: var(--fg-dim);
+            margin-top: 2px;
+        }
+
+        .cache-item .ci-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .cache-item .ci-btn {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--fg-muted);
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: var(--font-ui);
+            transition: all 0.15s;
+        }
+
+        .cache-item .ci-btn:hover {
+            color: var(--fg);
+            border-color: var(--border-light);
+        }
+
+        .cache-item .ci-btn.danger:hover {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 500;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.15s ease;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: var(--shadow);
+        }
+
+        .modal.large {
+            max-width: 700px;
+        }
+
+        .modal h2 {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .modal h2 i {
+            color: var(--accent);
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--fg-dim);
+            margin-bottom: 6px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            padding: 10px 14px;
+            border-radius: var(--radius);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: var(--accent);
+        }
+
+        .form-group select {
+            cursor: pointer;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        }
+
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 12px 18px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: var(--shadow);
+            animation: toastIn 0.3s ease;
+            min-width: 280px;
+        }
+
+        .toast.success {
+            border-left: 3px solid var(--accent);
+        }
+
+        .toast.success i {
+            color: var(--accent);
+        }
+
+        .toast.error {
+            border-left: 3px solid var(--danger);
+        }
+
+        .toast.error i {
+            color: var(--danger);
+        }
+
+        .toast.info {
+            border-left: 3px solid var(--info);
+        }
+
+        .toast.info i {
+            color: var(--info);
+        }
+
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--fg-dim);
+        }
+
+        .empty-state i {
+            font-size: 40px;
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .empty-state p {
+            font-size: 13px;
+        }
+
+        .loading-bar {
+            height: 3px;
+            background: var(--accent);
+            width: 0%;
+            animation: loadBar 2s ease-in-out forwards;
+            border-radius: 3px;
+            margin-bottom: 20px;
+        }
+
+        @keyframes loadBar {
+            0% {
+                width: 0%;
+            }
+
+            60% {
+                width: 80%;
+            }
+
+            100% {
+                width: 100%;
+            }
+        }
+
+        .network-graph {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .media-item-container {
+            position: relative;
+            border-radius: var(--radius);
+            overflow: hidden;
+            background: var(--bg-card);
+            aspect-ratio: 1;
+        }
+
+        .media-item {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .media-item:hover {
+            opacity: 0.82;
+        }
+
+        .media-analysis-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.72);
+            color: white;
+            font-size: 9px;
+            padding: 4px 6px;
+            max-height: 50%;
+            overflow-y: auto;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .media-item-container:hover .media-analysis-overlay {
+            opacity: 1;
+        }
+
+        .targets-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 240px;
+            overflow-y: auto;
+            margin-bottom: 8px;
+        }
+
+        .target-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 10px 14px;
+        }
+
+        .target-row .plat-badge {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: var(--info-dim);
+            color: var(--info);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .target-row-name {
+            flex: 1;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--fg);
+        }
+
+        .target-row-remove {
+            background: none;
+            border: none;
+            color: var(--fg-dim);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 6px;
+            border-radius: var(--radius);
+            transition: all 0.15s;
+        }
+
+        .target-row-remove:hover {
+            color: var(--danger);
+            background: var(--danger-dim);
+        }
+
+        .cache-modal-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+        }
+
+        .cache-modal-table th {
+            text-align: left;
+            padding: 8px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--fg-dim);
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-card);
+            position: sticky;
+            top: 0;
+        }
+
+        .cache-modal-table td {
+            padding: 8px;
+            font-size: 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--fg-muted);
+        }
+
+        .cache-scroll {
+            max-height: 280px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 16px;
+        }
+
+        .entity-group {
+            margin-bottom: 12px;
+        }
+
+        .entity-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--fg-dim);
+            margin-bottom: 6px;
+        }
+
+        .entity-pill {
+            display: inline-block;
+            background: var(--accent-dim);
+            border: 1px solid var(--accent-mid);
+            color: var(--accent);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: var(--font-mono);
+            margin: 0 4px 4px 0;
+        }
+
+        .target-chips-bar {
+            position: sticky;
+            top: 56px;
+            z-index: 99;
+            background: var(--topbar-bg);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 7px 28px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+            flex-shrink: 0;
+            min-height: 38px;
+        }
+
+        .target-chips-bar:empty {
+            display: none;
+        }
+
+        .target-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            padding: 3px 9px 3px 7px;
+            font-size: 11px;
+            color: var(--fg-muted);
+            transition: all 0.15s;
+        }
+
+        .target-chip:hover {
+            border-color: var(--border-light);
+        }
+
+        .chip-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--fg-dim);
+            flex-shrink: 0;
+        }
+
+        .chip-dot.fresh {
+            background: var(--accent);
+        }
+
+        .chip-dot.stale {
+            background: var(--warning);
+        }
+
+        .chip-dot.absent {
+            background: var(--fg-dim);
+        }
+
+        .chip-platform {
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--fg-dim);
+            background: var(--accent-dim);
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+
+        .chip-remove {
+            background: none;
+            border: none;
+            color: var(--fg-dim);
+            font-size: 13px;
+            line-height: 1;
+            padding: 0 0 0 1px;
+            opacity: 0;
+            transition: all 0.15s;
+            cursor: pointer;
+        }
+
+        .target-chip:hover .chip-remove {
+            opacity: 1;
+        }
+
+        .chip-remove:hover {
+            color: var(--danger);
+        }
+
+        .add-target-inline {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .add-target-inline select,
+        .add-target-inline input {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            font-family: var(--font-mono);
+            font-size: 11px;
+            padding: 4px 7px;
+            border-radius: 99px;
+            outline: none;
+            transition: border-color 0.2s;
+            -webkit-appearance: none;
+        }
+
+        .add-target-inline select:focus,
+        .add-target-inline input:focus {
+            border-color: var(--accent);
+        }
+
+        .add-target-inline input {
+            width: 100px;
+        }
+
+        .add-target-inline input::placeholder {
+            color: var(--fg-dim);
+        }
+
+        .add-target-inline .add-btn {
+            width: 22px;
+            height: 22px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--fg-dim);
+            border-radius: 50%;
+            font-size: 14px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            cursor: pointer;
+        }
+
+        .add-target-inline .add-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        .query-bar {
+            position: sticky;
+            top: 94px;
+            z-index: 98;
+            background: var(--topbar-bg);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 10px 28px;
+            flex-shrink: 0;
+        }
+
+        .query-bar-inner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: 800px;
+        }
+
+        .query-bar-inner .query-icon {
+            color: var(--fg-dim);
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        .query-bar-inner input {
+            flex: 1;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            font-family: var(--font-ui);
+            font-size: 13px;
+            padding: 10px 14px;
+            border-radius: var(--radius);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .query-bar-inner input::placeholder {
+            color: var(--fg-dim);
+        }
+
+        .query-bar-inner input:focus {
+            border-color: var(--accent);
+        }
+
+        .query-bar-inner .run-btn {
+            height: 38px;
+            padding: 0 20px;
+            background: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: var(--radius);
+            color: var(--bg);
+            font-family: var(--font-ui);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .query-bar-inner .run-btn:hover {
+            opacity: 0.9;
+        }
+
+        .query-bar-inner .run-btn:disabled {
+            opacity: 0.42;
+            cursor: not-allowed;
+        }
+
+        #themeToggle {
+            width: 32px;
+            height: 32px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--fg-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.15s;
+            flex-shrink: 0;
+            padding: 0;
+            font-size: 14px;
+        }
+
+        #themeToggle:hover {
+            background: var(--bg-card-hover);
+            color: var(--fg);
+            border-color: var(--border-light);
+        }
+
+        .contact-in-session {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--accent);
+            background: var(--accent-dim);
+            border: 1px solid var(--accent-mid);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .report-header-bar {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px 24px;
+            margin-bottom: 16px;
+            flex-shrink: 0;
+        }
+
+        .report-session-name {
+            font-size: 12px;
+            color: var(--fg-muted);
+            margin-top: 4px;
+        }
+
+        .report-header-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        #panelCanvas {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+            overflow: hidden;
+            background: var(--bg);
+        }
+
+        .panel-group {
+            position: absolute;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            min-width: 220px;
+            min-height: 80px;
+            transition: box-shadow 0.15s;
+        }
+
+        .panel-group:hover {
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+        }
+
+        .panel-group.active-panel {
+            border-color: var(--accent-mid);
+        }
+
+        .panel-group.collapsed .pg-content,
+        .panel-group.collapsed .pg-rh {
+            display: none;
+        }
+
+        .panel-group.collapsed {
+            min-height: 32px !important;
+            height: 32px !important;
+        }
+
+        .pg-header {
+            display: flex;
+            align-items: center;
+            height: 32px;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            cursor: move;
+            user-select: none;
+            touch-action: none;
+            flex-shrink: 0;
+            gap: 2px;
+            padding-right: 4px;
+        }
+
+        .pg-header:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .pg-tabs {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            min-width: 0;
+            gap: 1px;
+            padding-left: 6px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        .pg-tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .pg-tab {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--fg-dim);
+            border-radius: var(--radius);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.12s;
+            flex-shrink: 0;
+        }
+
+        .pg-tab:hover {
+            color: var(--fg-muted);
+            background: var(--bg-card-hover);
+        }
+
+        .pg-tab.active {
+            color: var(--fg);
+            background: var(--bg-elevated);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        }
+
+        .pg-tab i {
+            font-size: 9px;
+        }
+
+        .pg-tab-label {
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .pg-actions {
+            display: flex;
+            align-items: center;
+            gap: 1px;
+            flex-shrink: 0;
+        }
+
+        .fp-btn {
+            width: 22px;
+            height: 22px;
+            background: none;
+            border: none;
+            color: var(--fg-dim);
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: var(--radius);
+            transition: all 0.12s;
+            padding: 0;
+        }
+
+        .fp-btn:hover {
+            background: var(--bg-card-hover);
+            color: var(--fg);
+        }
+
+        .pg-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .pg-pane {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .pg-pane:empty {
+            display: none;
+        }
+
+        .fp-body {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 8-direction resize handles */
+        .pg-rh {
+            position: absolute;
+            z-index: 6;
+            touch-action: none;
+        }
+
+        .pg-rh-n {
+            top: -3px;
+            left: 10px;
+            right: 10px;
+            height: 6px;
+            cursor: ns-resize;
+        }
+
+        .pg-rh-s {
+            bottom: -3px;
+            left: 10px;
+            right: 10px;
+            height: 6px;
+            cursor: ns-resize;
+        }
+
+        .pg-rh-e {
+            right: -3px;
+            top: 10px;
+            bottom: 10px;
+            width: 6px;
+            cursor: ew-resize;
+        }
+
+        .pg-rh-w {
+            left: -3px;
+            top: 10px;
+            bottom: 10px;
+            width: 6px;
+            cursor: ew-resize;
+        }
+
+        .pg-rh-ne {
+            top: -3px;
+            right: -3px;
+            width: 14px;
+            height: 14px;
+            cursor: nesw-resize;
+        }
+
+        .pg-rh-nw {
+            top: -3px;
+            left: -3px;
+            width: 14px;
+            height: 14px;
+            cursor: nwse-resize;
+        }
+
+        .pg-rh-se {
+            bottom: -3px;
+            right: -3px;
+            width: 14px;
+            height: 14px;
+            cursor: nwse-resize;
+        }
+
+        .pg-rh-sw {
+            bottom: -3px;
+            left: -3px;
+            width: 14px;
+            height: 14px;
+            cursor: nesw-resize;
+        }
+
+        .pg-rh-se::after,
+        .pg-rh-sw::after,
+        .pg-rh-ne::after,
+        .pg-rh-nw::after {
+            content: '';
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            opacity: 0.3;
+            transition: opacity 0.15s;
+        }
+
+        .pg-rh-se::after {
+            bottom: 3px;
+            right: 3px;
+            border-right: 2px solid var(--fg-dim);
+            border-bottom: 2px solid var(--fg-dim);
+        }
+
+        .pg-rh-sw::after {
+            bottom: 3px;
+            left: 3px;
+            border-left: 2px solid var(--fg-dim);
+            border-bottom: 2px solid var(--fg-dim);
+        }
+
+        .pg-rh-ne::after {
+            top: 3px;
+            right: 3px;
+            border-right: 2px solid var(--fg-dim);
+            border-top: 2px solid var(--fg-dim);
+        }
+
+        .pg-rh-nw::after {
+            top: 3px;
+            left: 3px;
+            border-left: 2px solid var(--fg-dim);
+            border-top: 2px solid var(--fg-dim);
+        }
+
+        .pg-rh-se:hover::after,
+        .pg-rh-sw:hover::after,
+        .pg-rh-ne:hover::after,
+        .pg-rh-nw:hover::after {
+            opacity: 0.8;
+        }
+
+        /* Drop zone for merge */
+        .pg-drop-zone {
+            position: absolute;
+            inset: 0;
+            border: 2px solid transparent;
+            border-radius: var(--radius-lg);
+            pointer-events: none;
+            z-index: 10;
+            transition: all 0.2s;
+        }
+
+        .pg-drop-zone.show {
+            border-color: var(--accent);
+            background: rgba(0, 229, 155, 0.06);
+            box-shadow: inset 0 0 20px rgba(0, 229, 155, 0.08);
+        }
+
+        /* Snap guide */
+        .snap-guide {
+            position: absolute;
+            background: var(--accent);
+            opacity: 0.5;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* Pin */
+        .pg-pin-btn i {
+            transition: transform 0.15s, color 0.15s;
+        }
+
+        .panel-group[data-pinned="true"] .pg-pin-btn i {
+            color: var(--accent);
+            transform: rotate(45deg);
+        }
+
+        .panel-group[data-pinned="true"] .pg-header {
+            cursor: default;
+        }
+
+        .panel-group[data-pinned="true"] .pg-rh {
+            cursor: default;
+        }
+
+        /* Detach ghost */
+        .panel-group.detach-ghost {
+            position: fixed;
+            z-index: 99999;
+            pointer-events: none;
+            opacity: 0.7;
+            border: 1px dashed var(--accent);
+            background: var(--bg-elevated);
+            border-radius: var(--radius-lg);
+            min-width: 0;
+            min-height: 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .panel-group.detach-ghost .pg-header {
+            padding: 4px 10px;
+            height: auto;
+            min-height: 28px;
+        }
+
+        .fp-scroll {
+            padding: 16px 20px;
+        }
+
+        .fp-contacts-panel {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .fp-contacts-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .fp-contacts-toolbar input {
+            flex: 1;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 4px 8px;
+            font-size: 11px;
+            color: var(--fg);
+            outline: none;
+            font-family: var(--font-mono);
+            transition: border-color 0.15s;
+        }
+
+        .fp-contacts-toolbar input:focus {
+            border-color: var(--accent);
+        }
+
+        .fp-contacts-toolbar input::placeholder {
+            color: var(--fg-dim);
+        }
+
+        .fp-graph-container {
+            height: 170px;
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .fp-graph-container svg {
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+
+        .fp-graph-container svg:active {
+            cursor: grabbing;
+        }
+
+        .graph-zoom-ctrl {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            z-index: 5;
+        }
+
+        .gz-btn {
+            width: 24px;
+            height: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--fg-dim);
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.12s;
+            padding: 0;
+        }
+
+        .gz-btn:hover {
+            background: var(--bg-card-hover);
+            color: var(--fg);
+            border-color: var(--accent);
+        }
+
+        .fp-contacts-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .fp-contact-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.12s;
+        }
+
+        .fp-contact-row:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .fp-contact-avatar {
+            width: 24px;
+            height: 24px;
+            background: var(--bg-card-hover);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 9px;
+            color: var(--fg-muted);
+            flex-shrink: 0;
+            text-transform: uppercase;
+        }
+
+        .fp-contact-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .fp-contact-name {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--fg);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .fp-contact-detail {
+            font-size: 9px;
+            color: var(--fg-dim);
+            margin-top: 1px;
+            font-family: var(--font-mono);
+        }
+
+        .fp-plat-badge {
+            display: inline-block;
+            font-size: 8px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 1px 4px;
+            border-radius: 3px;
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .fp-itype {
+            display: inline-block;
+            font-size: 8px;
+            padding: 0px 3px;
+            border-radius: 3px;
+            border: 1px solid var(--border);
+            color: var(--fg-dim);
+        }
+
+        .fp-itype.retweet {
+            border-color: rgba(71, 179, 255, 0.3);
+            color: var(--info);
+        }
+
+        .fp-itype.mention {
+            border-color: rgba(0, 229, 155, 0.3);
+            color: var(--accent);
+        }
+
+        .fp-itype.repo_interaction {
+            border-color: rgba(167, 139, 250, 0.3);
+            color: #a78bfa;
+        }
+
+        .fp-contact-weight {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            flex-shrink: 0;
+        }
+
+        .weight-bar-wrap {
+            width: 24px;
+            height: 3px;
+            background: var(--bg-card-hover);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .weight-bar {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+        }
+
+        .weight-num {
+            font-family: var(--font-mono);
+            font-size: 9px;
+            color: var(--fg-dim);
+            width: 14px;
+            text-align: right;
+        }
+
+        .fp-contact-add {
+            width: 20px;
+            height: 20px;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--fg-dim);
+            font-size: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: all 0.12s;
+            padding: 0;
+        }
+
+        .fp-contact-add:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        .fp-contact-add.in-session {
+            border-color: var(--accent-mid);
+            color: var(--accent);
+            background: var(--accent-dim);
+            cursor: default;
+            opacity: 0.5;
+        }
+
+        .fp-entity-group {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+        }
+
+        .fp-entity-title {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: var(--fg-dim);
+            margin-bottom: 5px;
+        }
+
+        .fp-entity-pill {
+            display: inline-block;
+            background: var(--accent-dim);
+            border: 1px solid var(--accent-mid);
+            color: var(--accent);
+            padding: 2px 7px;
+            border-radius: var(--radius);
+            font-size: 10px;
+            font-family: var(--font-mono);
+            margin: 0 3px 3px 0;
+        }
+
+        .fp-history-item {
+            padding: 7px 10px;
+            cursor: pointer;
+            border-left: 2px solid transparent;
+            transition: all 0.12s;
+        }
+
+        .fp-history-item:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .fp-history-item.active {
+            background: var(--accent-dim);
+            border-left-color: var(--accent);
+        }
+
+        .fp-history-query {
+            font-size: 11px;
+            color: var(--fg-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: 500;
+        }
+
+        .fp-history-ts {
+            font-family: var(--font-mono);
+            font-size: 9px;
+            color: var(--fg-dim);
+            margin-top: 1px;
+        }
+
+        .panel-empty {
+            padding: 24px 16px;
+            text-align: center;
+            color: var(--fg-dim);
+            font-size: 11px;
+            line-height: 1.7;
+        }
+
+        .graph-empty {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--fg-dim);
+            font-size: 11px;
+            text-align: center;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .graph-empty i {
+            font-size: 24px;
+            color: var(--border-light);
+        }
+
+        .node-source circle {
+            fill: var(--accent);
+            stroke: var(--bg-card);
+            stroke-width: 2.5px;
+        }
+
+        .node-contact circle {
+            fill: var(--bg-card-hover);
+            stroke: var(--border-light);
+            stroke-width: 1.5px;
+            cursor: pointer;
+        }
+
+        .node-contact:hover circle {
+            fill: var(--accent-dim);
+            stroke: var(--accent);
+        }
+
+        .node-label {
+            font-family: var(--font-mono);
+            font-size: 9px;
+            fill: var(--fg-muted);
+            pointer-events: none;
+        }
+
+        .graph-link {
+            stroke: var(--border-light);
+            stroke-opacity: 0.5;
+        }
+
+        .timeline-section {
+            margin-bottom: 24px;
+        }
+
+        .timeline-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--fg);
+            margin-bottom: 4px;
+        }
+
+        .timeline-subtitle {
+            font-size: 12px;
+            color: var(--fg-muted);
+            margin-bottom: 16px;
+        }
+
+        .timeline-divider {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 24px 0;
+        }
+
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: 40px repeat(24, 1fr);
+            gap: 2px;
+            margin-top: 8px;
+        }
+
+        .heatmap-cell {
+            aspect-ratio: 1;
+            border-radius: 2px;
+            transition: transform 0.1s;
+        }
+
+        .heatmap-cell:hover {
+            transform: scale(1.15);
+            z-index: 10;
+            position: relative;
+            border: 1px solid var(--border-light);
+        }
+
+        .heatmap-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--fg-dim);
+            align-self: center;
+            text-align: right;
+            padding-right: 6px;
+        }
+
+        .bar {
+            fill: var(--accent);
+            transition: fill 0.15s;
+        }
+
+        .bar:hover {
+            fill: var(--info);
+        }
+
+        .axis text {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            fill: var(--fg-muted);
+        }
+
+        .axis path,
+        .axis line {
+            stroke: var(--border-light);
+        }
+
+        .chart-tooltip {
+            position: fixed;
+            text-align: center;
+            padding: 6px 10px;
+            font-size: 11px;
+            font-family: var(--font-ui);
+            background: var(--bg-elevated);
+            color: var(--fg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            pointer-events: none;
+            opacity: 0;
+            box-shadow: var(--shadow);
+            z-index: 10000;
+            transition: opacity 0.15s;
+        }
+
+        @media (max-width: 1200px) {
+            .dash-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .dash-columns {
+                flex-direction: column;
+            }
+
+            .dash-col-side {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                display: none;
+            }
+
+            .dash-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .cache-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .contacts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hide-mobile {
+                display: none;
+            }
+
+            .query-bar {
+                padding: 8px 16px;
+            }
+
+            .query-bar-inner input {
+                font-size: 12px;
+                padding: 8px 10px;
+            }
+
+            .query-bar-inner .run-btn {
+                height: 34px;
+                padding: 0 14px;
+                font-size: 12px;
+            }
+
+            .target-chips-bar {
+                padding: 7px 16px;
+            }
+        }
+
+        .demo-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            background: #00c853;
+            color: #000;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .demo-banner span {
+            opacity: 0.7;
+            font-weight: 400;
+            font-size: 10px;
+            letter-spacing: 0;
+            margin-left: 12px;
+        }
+
+        .app-layout {
+            padding-top: 30px;
+        }
+
+        .sidebar {
+            height: calc(100vh - 30px);
+        }
+
+        .main-content {
+            height: calc(100vh - 30px);
+        }
+
+        .toast-container {
+            top: 50px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="demo-banner">DEMO MODE<span>All data is pre-loaded and simulated</span></div>
+    <div class="scanline-overlay"></div>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <div class="icon-wrap"><i class="fa-solid fa-shield-halved"></i></div>
+                    <div>
+                        <h1>Social OSINT Agent</h1>
+                        <span><a href="https://github.com/bm-github/owasp-social-osint-agent" target="_blank"
+                                rel="noopener">An OWASP Project</a></span>
+                    </div>
+                </div>
+            </div>
+            <div class="sidebar-nav">
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Navigation</div>
+                    <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">
+                        <i class="fa-solid fa-grid-2"></i> Dashboard
+                    </div>
+                    <div class="nav-item" data-page="contacts" onclick="switchPage('contacts')">
+                        <i class="fa-solid fa-address-book"></i> Contacts
+                        <span class="count" id="contactCount">0</span>
+                    </div>
+                    <div class="nav-item" data-page="cache" onclick="switchPage('cache')">
+                        <i class="fa-solid fa-database"></i> Cache
+                        <span class="count" id="cacheCount">0</span>
+                    </div>
+                    <div class="nav-item" data-page="media" onclick="switchPage('media')">
+                        <i class="fa-solid fa-images"></i> Media
+                        <span class="count" id="mediaCount">0</span>
+                    </div>
+                </div>
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Sessions</div>
+                    <div id="sessionList"></div>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <button class="btn-new-session" onclick="toast('Demo mode - sessions are pre-loaded','info')">
+                    <i class="fa-solid fa-plus"></i> New Session
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="topbar">
+                <div class="topbar-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="globalSearch" placeholder="Search reports, contacts, selectors..."
+                        oninput="handleGlobalSearch(this.value)">
+                </div>
+                <div class="topbar-actions">
+                    <div id="statusIndicator"
+                        style="display:none;align-items:center;gap:6px;font-size:11px;color:var(--fg-dim);font-family:var(--font-mono);">
+                        <div class="status-dot-running" id="statusDot"></div>
+                        <span id="statusText">Running...</span>
+                    </div>
+                    <button class="topbar-btn" onclick="toast('Demo mode - targets are pre-loaded','info')"
+                        id="btnManageTargets">
+                        <i class="fa-solid fa-crosshairs"></i> <span class="hide-mobile">Targets</span>
+                    </button>
+                    <button id="themeToggle" onclick="toggleTheme()" title="Toggle theme">
+                        <i class="fa-solid fa-moon" id="themeIconMoon"></i>
+                        <i class="fa-solid fa-sun" id="themeIconSun" style="display:none;"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="target-chips-bar" id="targetChipsBar">
+                <div id="targetChips"></div>
+                <form class="add-target-inline" id="addTargetForm" onsubmit="return false;">
+                    <select id="addPlatformSelect">
+                        <option value="bluesky">bluesky</option>
+                        <option value="twitter">twitter</option>
+                        <option value="mastodon">mastodon</option>
+                        <option value="reddit">reddit</option>
+                        <option value="github">github</option>
+                        <option value="hackernews">hackernews</option>
+                    </select>
+                    <input type="text" id="addUsernameInput" placeholder="username" autocomplete="off" autocorrect="off"
+                        autocapitalize="none" spellcheck="false">
+                    <button class="add-btn" type="submit" title="Add target" onclick="addTargetInline()">+</button>
+                </form>
+            </div>
+            <div class="query-bar" id="queryBar">
+                <div class="query-bar-inner">
+                    <i class="fa-solid fa-terminal query-icon"></i>
+                    <input type="text" id="queryInput" list="querySuggestions" placeholder="Enter analysis query..."
+                        autocomplete="off" autocorrect="off" autocapitalize="none">
+                    <datalist id="querySuggestions">
+                        <option value="Comprehensive profile analysis and OSINT assessment">
+                        <option value="Analyze posting patterns and behavioral indicators">
+                        <option value="Map social network connections and interaction patterns">
+                        <option value="Extract and analyze location data and geolocation indicators">
+                        <option value="Identify potential aliases and linked accounts">
+                        <option value="Assess sentiment, tone, and psychological indicators">
+                        <option value="Generate timeline of key events and activities">
+                        <option value="Analyze media content for contextual intelligence">
+                        <option value="Identify potential operational security vulnerabilities">
+                        <option value="Cross-reference mentions with known entities">
+                    </datalist>
+                    <button class="run-btn" id="btnRunAnalysis" onclick="runAnalysis()">
+                        <i class="fa-solid fa-bolt"></i> <span class="hide-mobile">Run Analysis</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="page active" id="page-dashboard">
+                <div class="dash-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Sessions</div>
+                        <div class="stat-value" id="statSessions">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Reports Generated</div>
+                        <div class="stat-value" id="statReports">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Contacts Tracked</div>
+                        <div class="stat-value" id="statContacts">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Cache Entries</div>
+                        <div class="stat-value" id="statCache">0</div>
+                    </div>
+                </div>
+                <div class="dash-columns">
+                    <div class="dash-col-main">
+                        <div class="dash-section-title"><i class="fa-solid fa-file-lines"></i> Recent Reports</div>
+                        <div id="recentReportsList"></div>
+                    </div>
+                    <div class="dash-col-side">
+                        <div class="dash-section-title"><i class="fa-solid fa-folder-open"></i> Sessions</div>
+                        <div id="dashSessionList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="page" id="page-report">
+                <div class="report-header-bar" id="reportHeaderBar">
+                    <div class="report-header-top">
+                        <div>
+                            <div class="report-query" id="reportQueryText"></div>
+                            <div class="report-session-name" id="reportSessionName"></div>
+                        </div>
+                        <div class="report-header-actions">
+                            <button class="topbar-btn" onclick="downloadReport()">
+                                <i class="fa-solid fa-download"></i> <span class="hide-mobile">Download</span>
+                            </button>
+                            <button class="topbar-btn" onclick="copyReport()">
+                                <i class="fa-solid fa-copy"></i> <span class="hide-mobile">Copy</span>
+                            </button>
+                            <button class="topbar-btn" onclick="resetLayout()" title="Reset panel layout">
+                                <i class="fa-solid fa-table-columns"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="report-meta-row" id="reportMetaRow"></div>
+                </div>
+                <div id="panelCanvas"></div>
+            </div>
+
+            <div class="page" id="page-progress">
+                <div class="loading-bar" id="progressBar"></div>
+                <div class="report-section" style="margin-top:20px;">
+                    <h3><span class="section-num"><i class="fa-solid fa-spinner fa-spin"></i></span> <span
+                            id="progressStageLabel">Starting analysis...</span></h3>
+                    <div id="progressLog"
+                        style="font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);max-height:400px;overflow-y:auto;line-height:1.8;">
+                    </div>
+                </div>
+            </div>
+
+            <div class="page" id="page-contacts">
+                <div class="contacts-toolbar">
+                    <div class="contacts-search">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="contactSearch" placeholder="Filter contacts..."
+                            oninput="filterContacts(this.value)">
+                    </div>
+                </div>
+                <div class="contacts-grid" id="contactsGrid"></div>
+            </div>
+
+            <div class="page" id="page-cache">
+                <div class="cache-stats">
+                    <div class="cache-stat">
+                        <div class="cs-value" id="cacheTotal">0</div>
+                        <div class="cs-label">Total Entries</div>
+                    </div>
+                    <div class="cache-stat">
+                        <div class="cs-value" id="cacheHits">0</div>
+                        <div class="cs-label">Fresh</div>
+                    </div>
+                    <div class="cache-stat">
+                        <div class="cs-value" id="cacheExpired">0</div>
+                        <div class="cs-label">Stale</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:16px;">
+                    <button class="topbar-btn" onclick="filterCache('all')"><i class="fa-solid fa-layer-group"></i>
+                        All</button>
+                    <button class="topbar-btn" onclick="filterCache('fresh')"><i class="fa-solid fa-circle"
+                            style="color:var(--accent);font-size:8px;"></i> Fresh</button>
+                    <button class="topbar-btn" onclick="filterCache('stale')"><i class="fa-solid fa-circle"
+                            style="color:var(--warning);font-size:8px;"></i> Stale</button>
+                    <button class="topbar-btn" style="margin-left:auto;"
+                        onclick="toast('Demo mode - cache is read-only','info')"><i class="fa-solid fa-trash"></i> Purge
+                        All</button>
+                </div>
+                <div class="cache-list" id="cacheList"></div>
+            </div>
+
+            <div class="page" id="page-media">
+                <div class="dash-section-title"><i class="fa-solid fa-images"></i> Downloaded Media</div>
+                <div class="media-grid" id="mediaGrid"></div>
+            </div>
+
+        </main>
+    </div>
+    <div id="d3Tooltip" class="chart-tooltip"></div>
+
+    <script>
+        const DEMO_REPORTS = {};
+        DEMO_REPORTS["q-001"] = "## Executive Summary\n\nA comprehensive cross-platform Open Source Intelligence (OSINT) assessment was conducted targeting the identities **thr3at.act0r** (Bluesky), **sh4d0wdev** (GitHub), and **darknet_res** (Twitter/X). The analysis reveals a high-confidence correlation between these three accounts, belonging to a single operator with advanced technical skills in cybersecurity, exploit development, and network intrusion techniques.\n\nThe subject demonstrates a consistent pattern of engagement within InfoSec communities across all three platforms, with notable overlap in temporal posting patterns, linguistic fingerprints, and shared domain expertise. Cross-referencing of metadata, interaction graphs, and content analysis yields a **92% confidence** assessment that these accounts are operated by the same individual.\n\n**Key Findings:**\n\n- Active participation in vulnerability research and exploit development\n- Known associations with the Chaos Computer Club and NullSec Collective\n- Cryptocurrency addresses linked to darknet marketplace activity\n- Geographic indicators pointing to Berlin, Germany as primary base of operations\n- Multiple aliases used across different platforms to compartmentalize activities\n\n---\n\n## Platform-by-Platform Analysis\n\n### Bluesky \u2014 thr3at.act0r.bsky.social\n\nThe Bluesky account **thr3at.act0r** has been active since early 2024, accumulating **847 posts** with a primary focus on:\n\n- **Threat intelligence sharing** (38% of content)\n- **Zero-day vulnerability discussions** (22%)\n- **Cryptography and OpSec tutorials** (18%)\n- **Political commentary on digital rights** (12%)\n- **Personal/Off-topic** (10%)\n\nThe account demonstrates sophisticated understanding of network protocols, frequently posting technical analyses of CVEs within hours of public disclosure. Engagement metrics show a **follower-to-following ratio of 4.2:1**, indicating established credibility within the InfoSec community.\n\nNotable patterns include:\n- Posts primarily between **22:00-03:00 UTC** (consistent with CET timezone)\n- Heavy use of **German-language technical terminology** mixed with English\n- Frequent references to Berlin-based hacker spaces and meetups\n- Shared media includes screenshots from terminal sessions using German keyboard layout\n\n### GitHub \u2014 sh4d0wdev\n\nThe GitHub profile **sh4d0wdev** contains **23 public repositories** primarily focused on:\n\n| Category | Repositories | Stars | Language |\n|----------|-------------|-------|----------|\n| Exploit PoCs | 8 | 1,247 | Python, C |\n| Network tools | 5 | 893 | Go, Rust |\n| Cryptography | 4 | 412 | Python |\n| OSINT frameworks | 3 | 678 | Python |\n| Miscellaneous | 3 | 156 | Various |\n\nKey observations:\n- Commit timestamps align with **CET timezone** (UTC+1/+2)\n- Code comments alternate between English and German\n- Repository descriptions use similar phrasing patterns to Bluesky posts\n- **2 commits** reference the handle \"phantom.sys\" \u2014 matching a known alias\n- Active contributions to NullSec Collective's organizational GitHub\n\n### Twitter/X \u2014 darknet_res\n\nThe **@darknet_res** account serves as the primary broadcast channel with **1,203 tweets** and **4,832 followers**. Content analysis reveals:\n\n- **Retweet ratio**: 45% (high information redistribution)\n- **Original analysis**: 35% of tweets\n- **Engagement bait / memes**: 20%\n- Frequent interactions with known threat actor accounts\n- Multiple deleted tweets captured via archive services containing OPSEC-sensitive information\n- Geolocation data embedded in **3 archived images** placing the user in the **Kreuzberg district of Berlin**\n\n---\n\n## Cross-Platform Correlation\n\n### Temporal Analysis\n\nPost timing analysis across all three platforms shows a **Pearson correlation coefficient of 0.87** between Bluesky and GitHub activity, and **0.82** between Bluesky and Twitter activity. This strongly suggests a single operator managing all three accounts.\n\nPeak activity windows:\n- **Weekdays**: 22:00 - 02:00 UTC\n- **Weekends**: 14:00 - 22:00 UTC\n- Notable gaps: German public holidays align with reduced activity on all platforms\n\n### Linguistic Fingerprint\n\nNatural Language Processing analysis of 3,400+ text samples across platforms reveals:\n\n- Consistent use of **Oxford commas** in English posts\n- Identical technical jargon: \"exploit chain\", \"payload staging\", \"C2 infrastructure\"\n- German interjections appearing in the same contexts (\"Genau\", \"Allerdings\")\n- Identical emoji usage patterns: \ud83d\udc80 (skull) for \"this is broken\", \ud83d\udd25 for \"excellent work\"\n\n### Shared Domains & Technical Overlap\n\n| Indicator | Bluesky | GitHub | Twitter |\n|-----------|---------|--------|---------|\n| Terminal theme | Catppuccin Mocha | Catppuccin Mocha | \u2014 |\n| Email domain | proton.me | \u2014 | \u2014 |\n| PGP key ID | \u2014 | 0xABCD1234 | \u2014 |\n| Mentioned tools | Burp Suite, Cobalt Strike | Custom forks | Burp Suite |\n| Referenced locations | Berlin, Tallinn | \u2014 | Berlin, S\u00e3o Paulo |\n\n---\n\n## Intelligence Selectors\n\n**Primary Identifiers:**\n- **PGP Key**: 0xABCD1234EF567890\n- **Bitcoin**: bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh\n- **Ethereum**: 0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18\n- **ProtonMail**: thr3at@proton.me\n- **Tutanota**: shadow.dev@tutanota.com\n\n**Known Aliases:** sh4d0w_0ps, night_coder, phantom.sys\n\n**Phone:** +49 30 1234 5678\n\n---\n\n## Risk Assessment\n\n| Risk Factor | Level | Notes |\n|------------|-------|-------|\n| Technical Capability | **HIGH** | Advanced exploit development, C2 infrastructure |\n| OPSEC Awareness | **MODERATE** | Good compartmentalization but metadata leaks present |\n| Network Reach | **HIGH** | Connected to 50+ known security researchers |\n| Geographic Exposure | **MODERATE** | Berlin confirmed via multiple indicators |\n| Identity Correlation Risk | **HIGH** | Cross-platform linking achievable with public data |\n";
+        DEMO_REPORTS["q-002"] = "## Social Network Analysis\n\nA deep-dive analysis of the social graph surrounding the target accounts reveals two distinct clusters of interaction, with the target operating as a **bridge node** between communities.\n\n---\n\n## Primary Cluster: InfoSec Community\n\nThe primary cluster consists of **28 accounts** across Bluesky and Twitter that form a tightly-knit InfoSec research community. The target maintains a **betweenness centrality score of 0.34**, indicating significant influence as an information broker.\n\n**Key nodes in the primary cluster:**\n\n| Account | Platform | Role | Interaction Weight |\n|---------|----------|------|-------------------|\n| cyb3r_w0lf | Bluesky | Exploit developer | 24 |\n| 0x_phantom | Twitter | Vulnerability researcher | 15 |\n| sec.research.bsky.social | Bluesky | Threat intel analyst | 11 |\n| malware_hunter | Twitter | Malware analyst | 9 |\n| cti_analyst | Twitter | CTI specialist | 5 |\n\nThe target frequently **initiates technical discussions** that receive high engagement, suggesting a role as a thought leader rather than a passive participant.\n\n## Secondary Cluster: Exploit Development\n\nA smaller, more secretive cluster of **12 accounts** operates primarily on GitHub, focused on exploit PoC development and vulnerability research. Key characteristics:\n\n- Repositories are frequently set to **private** or **deleted after 48 hours**\n- Communication uses coded language referencing \"recipes\" and \"ingredients\"\n- The target accounts **nullbyte_sys** (weight: 18) and **exploitdb_dev** (weight: 12) are central to this cluster\n- Repository collaboration patterns show coordinated disclosure timing\n\n---\n\n## Network Centrality\n\n| Metric | Target Score | Network Average |\n|--------|-------------|-----------------|\n| Degree Centrality | 0.73 | 0.21 |\n| Betweenness Centrality | 0.34 | 0.08 |\n| Eigenvector Centrality | 0.89 | 0.31 |\n| Clustering Coefficient | 0.42 | 0.58 |\n\nThe high eigenvector centrality indicates the target is connected to other highly-connected individuals, amplifying information reach.\n\n---\n\n## Interaction Patterns\n\n**Temporal patterns:**\n- Most interactions occur during **European evening hours** (18:00-00:00 CET)\n- Weekend interactions are **2.3x** more likely to involve the exploit development cluster\n- Reply latency averages **4.2 minutes** for the primary cluster, **12.8 minutes** for the secondary\n\n**Content patterns:**\n- 67% of interactions are **technical in nature** (code reviews, vulnerability analysis)\n- 23% are **social** (event coordination, personal conversation)\n- 10% are **operational** (scheduling, logistics for meetups)\n\n**Geographic correlation:**\n- **Berlin, Germany** \u2014 confirmed as primary location through event check-ins and meetup organization\n- All face-to-face meetup references point to Berlin-based hacker spaces\n";
+        DEMO_REPORTS["q-003"] = "## Sentiment Analysis Report\n\nComprehensive sentiment analysis was performed on **2,847 text samples** collected across all target accounts using a multi-model ensemble approach.\n\n---\n\n## Overall Sentiment Profile\n\n| Sentiment Category | Percentage | Trend |\n|-------------------|-----------|-------|\n| Positive | 31.2% | Stable |\n| Neutral | 48.7% | Slightly increasing |\n| Negative | 20.1% | Decreasing |\n\nThe sentiment distribution is **consistent with a technical professional** who maintains professional objectivity while occasionally expressing frustration with security vulnerabilities and vendor responses.\n\n### Platform-Specific Sentiment\n\n**Bluesky** (thr3at.act0r): Most positive tone, frequently expressing enthusiasm about new vulnerability discoveries and sharing educational content.\n\n**Twitter** (darknet_res): Most negative tone, particularly when discussing vendor security practices and government surveillance. Anger spikes correlate with major data breach disclosures.\n\n**GitHub** (sh4d0wdev): Predominantly neutral, focused on technical documentation and code comments. Occasional frustration evident in commit messages (\"fix: another edge case\", \"why does this even happen\").\n\n---\n\n## Behavioral Indicators\n\n### Confidence Level: HIGH\nAnalysis of language patterns, posting consistency, and technical depth indicates **high self-confidence** in domain expertise. The subject rarely qualifies statements with hedging language and frequently corrects others authoritatively.\n\n### Social Dynamics\n- **Proactive communicator**: Initiates 68% of conversations\n- **Mentor behavior**: Provides detailed technical explanations to junior researchers\n- **Community standing**: Receives 3.2x more engagement than average in their circles\n- **Conflict style**: Direct and assertive, rarely backs down from technical debates\n\n### Stress Indicators\nPeriods of increased posting frequency and shorter, more cryptic messages correlate with:\n- Active exploit development phases (inferred from GitHub activity spikes)\n- Proximity to major security conferences (likely presentation preparation)\n- Response to high-profile vulnerability disclosures\n\n### Linguistic Consistency\nCross-platform linguistic analysis yields a **consistency score of 94.2%**, strongly supporting the single-operator hypothesis. Key linguistic markers:\n- Consistent use of active voice across all platforms\n- Identical abbreviation patterns (e.g., \"vuln\", \"exploit chain\", \"RCE\")\n- Similar sentence length distributions (median: 14.3 words)\n";
+        DEMO_REPORTS["q-004"] = "## Behavioral Pattern Analysis \u2014 Corporate Intelligence Assessment\n\nAn in-depth behavioral analysis was conducted on the accounts **nexacorp_ceo** (Twitter), **nexacorp-oss** (GitHub), and **nexacorp_watchdog** (Reddit) associated with NexaCorp Inc.\n\n---\n\n## Executive Summary\n\nThe three accounts exhibit distinct behavioral patterns consistent with a coordinated corporate intelligence gathering and reputation management operation. The primary account (nexacorp_ceo) serves as the official executive presence, while the secondary accounts appear to serve complementary roles in open-source contribution and community monitoring.\n\n---\n\n## Account Profiles\n\n### nexacorp_ceo \u2014 Twitter/X\n**Posts Analyzed**: 156 | **Media**: 32 | **Analysis Period**: Sep 2024 \u2014 Jan 2025\n\nKey behavioral indicators:\n- **Posting schedule**: Highly regimented, 3-5 tweets per day during business hours (PST)\n- **Content themes**: Product announcements (35%), industry commentary (28%), recruitment (15%), personal branding (22%)\n- **Geolocation signals**: Frequent posts from San Francisco, CA and Austin, TX\n- **Email exposure**: ceo@nexacorp.io found in GitHub commit metadata\n- **Alias indicators**: The handle \"nexacorp_insider\" appears in self-referential contexts\n\n### nexacorp-oss \u2014 GitHub\n**Posts Analyzed**: 234 | **Repositories**: 18 public\n\nThe open-source arm of NexaCorp demonstrates:\n- **5 media files** uploaded to repositories (screenshots, architecture diagrams)\n- Only **3 of 234 commits** have been analyzed, indicating limited intelligence coverage\n- Code patterns suggest active development of internal tools for \"competitive analysis\"\n- Repository access logs (where available) show activity from both SF and Austin IP ranges\n\n### nexacorp_watchdog \u2014 Reddit\n**Posts Analyzed**: 42 | **Subreddits**: r/netsec, r/cybersecurity, r/nexacorp\n\nThis account serves as a **community monitoring and reputation management** tool:\n- **79% of posts** are in threads mentioning NexaCorp or its competitors\n- Rapid response time: average **22 minutes** to respond to negative mentions\n- Uses carefully crafted language to appear as an independent community member\n- Account creation date coincides with NexaCorp's Series B funding announcement\n\n---\n\n## Temporal Patterns\n\n| Timeframe | nexacorp_ceo | nexacorp-oss | nexacorp_watchdog |\n|-----------|-------------|-------------|-------------------|\n| Weekday business hours | HIGH | HIGH | LOW |\n| Weekday evenings | LOW | MODERATE | HIGH |\n| Weekends | MINIMAL | LOW | HIGH |\n| Conference periods | VERY HIGH | MODERATE | HIGH |\n\nThe complementary posting schedule suggests **coordinated account management** rather than independent operators.\n\n---\n\n## OPSEC Concerns\n\n1. **Email correlation**: ceo@nexacorp.io appears in both GitHub commits and Twitter bio\n2. **IP address overlap**: nexacorp-oss and nexacorp_ceo activity originates from overlapping IP ranges\n3. **Writing style**: Stylometric analysis yields 78% similarity between nexacorp_watchdog and known NexaCorp PR materials\n4. **Timing correlation**: nexacorp_watchdog posts consistently appear within minutes of official NexaCorp announcements\n";
+        DEMO_REPORTS["q-005"] = "## Operational Security Vulnerability Assessment\n\nThis report identifies critical OPSEC vulnerabilities in the digital footprint of NexaCorp's executive and associated accounts.\n\n---\n\n## Critical Findings\n\n### 1. Geolocation Exposure \u2014 CRITICAL\n\nMultiple geolocation data points have been identified that compromise operational security:\n\n| Source | Location | Precision | Confidence |\n|--------|----------|-----------|------------|\n| Twitter geo-tagged posts | San Francisco, CA | City-level | 95% |\n| Twitter geo-tagged posts | Austin, TX | City-level | 90% |\n| EXIF data in GitHub uploads | Kreuzberg, Berlin | GPS coordinates | 85% |\n| Reddit event posts | San Francisco, CA | Neighborhood | 92% |\n\n**San Francisco, CA** appears to be the primary operational base, with **Austin, TX** serving as a secondary location. The Berlin connection appears to be related to European operations.\n\n### 2. Identity Correlation \u2014 HIGH\n\nThe following data points create a traceable chain between accounts:\n\n- **Email**: ceo@nexacorp.io appears in Twitter bio, GitHub profile, and commit metadata\n- **Email**: security@nexacorp.io found in GitHub security policy files\n- **Alias**: \"nexacorp_insider\" used across Reddit and referenced in Twitter DMs\n- **Alias**: \"devOps_ninja\" found in Slack webhook configurations committed to public repos\n- **Crypto**: Ethereum address 0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18 linked to GitHub sponsor page\n\n### 3. Temporal Fingerprint \u2014 MODERATE\n\nAnalysis of posting timestamps reveals:\n- **nexacorp_ceo** and **nexacorp-oss** share identical work-hour patterns (09:00-18:00 PST, Mon-Fri)\n- **nexacorp_watchdog** activity spikes immediately following **nexacorp_ceo** posts\n- Holiday patterns across all accounts align with US federal holidays\n- No activity detected during known company retreat dates\n\n### 4. Tool Fingerprinting \u2014 MODERATE\n\nTechnical metadata analysis reveals:\n- GitHub commits authored from **VS Code** with identical extension configurations\n- Twitter images processed with the same **image compression pipeline** (identical quantization tables)\n- Reddit posts show consistent **Markdown formatting** patterns matching GitHub README files\n- All accounts use the same **URL shortener** domain for shared links\n\n### 5. Cross-Platform Account Linking \u2014 CRITICAL\n\nDefinitive links between accounts:\n\n```\nnexacorp_ceo (Twitter)\n  \u251c\u2500\u2500 Same email: ceo@nexacorp.io \u2192 nexacorp-oss (GitHub)\n  \u251c\u2500\u2500 Same crypto address \u2192 nexacorp-oss (GitHub)\n  \u2514\u2500\u2500 Stylometric match (78%) \u2192 nexacorp_watchdog (Reddit)\n\nnexacorp-oss (GitHub)\n  \u251c\u2500\u2500 Exposed webhook \u2192 Internal Slack #security channel\n  \u251c\u2500\u2500 Committed .env files (2 occurrences) \u2192 API keys exposed\n  \u2514\u2500\u2500 Pushed from same IP range \u2192 nexacorp_ceo (Twitter)\n```\n\n---\n\n## Recommendations for the Assessor\n\nThe identified OPSEC vulnerabilities provide multiple avenues for continued intelligence gathering:\n\n1. Monitor GitHub repositories for accidental credential commits\n2. Track Ethereum address for financial transaction intelligence\n3. Correlate Reddit posts with official announcements for insider information indicators\n4. Monitor Berlin-based activity for European expansion intelligence\n";
+
+        'use strict';
+
+        const COLORS = ['#00e59b', '#47b3ff', '#ffb347', '#ff4d6a', '#a78bfa', '#f472b6', '#34d399', '#fbbf24'];
+        const LS_LAYOUT_KEY = 'osint-demo-layout';
+        const PANEL_ICONS = { report: 'fa-file-lines', timeline: 'fa-chart-bar', history: 'fa-clock-rotate-left', contacts: 'fa-address-book', entities: 'fa-tags' };
+        const PANEL_TITLES = { report: 'Report', timeline: 'Timeline', history: 'History', contacts: 'Contacts', entities: 'Entities' };
+
+        const state = {
+            sessions: [], currentSession: null, activeQueryId: null, runningJobId: null,
+            sseSource: null, cacheEntries: [], contacts: [], contactsDismissed: [],
+            contactsFilter: '', mediaItems: [], cacheFilter: 'all', activePage: 'dashboard',
+            mtTargets: [], theme: 'dark', timelineEvents: [], panelFilter: '',
+        };
+
+        let panelZCounter = 10;
+        let panelsInited = false;
+        const SNAP_THRESHOLD = 15;
+        const SNAP_PAD = 4;
+        const ALL_PANELS = ['report', 'timeline', 'history', 'contacts', 'entities'];
+
+        // ═══════════════ MOCK DATA ═══════════════
+
+        const MOCK_SESSIONS = [
+            {
+                session_id: 'sess-shadow-001',
+                name: 'Shadow Trace Assessment',
+                platforms: { bluesky: ['thr3at.act0r.bsky.social'], github: ['sh4d0wdev'], twitter: ['darknet_res'] },
+                fetch_options: { default_count: 50, targets: {} },
+                target_count: 3,
+                query_count: 3,
+                query_history: [
+                    {
+                        query_id: 'q-001',
+                        query: 'Comprehensive profile analysis and OSINT assessment',
+                        timestamp: '2025-01-12T14:35:22Z',
+                        metadata: { generated_utc: '2025-01-12T14:35:22Z', mode: 'online', models: { text: 'claude-3.5-sonnet' } },
+                        entities: {
+                            locations: ['Berlin, Germany', 'São Paulo, Brazil', 'Tallinn, Estonia'],
+                            email_addresses: ['thr3at@proton.me', 'shadow.dev@tutanota.com'],
+                            crypto_addresses: ['bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh', '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18'],
+                            aliases: ['sh4d0w_0ps', 'night_coder', 'phantom.sys'],
+                            phone_numbers: ['+49 30 1234 5678'],
+                            organizations: ['Chaos Computer Club', 'NullSec Collective']
+                        },
+                        report: DEMO_REPORTS["q-001"]
+                    },
+                    {
+                        query_id: 'q-002',
+                        query: 'Map social network connections and interaction patterns',
+                        timestamp: '2025-01-13T10:19:44Z',
+                        metadata: { generated_utc: '2025-01-13T10:19:44Z', mode: 'Online', models: { text: 'claude-3.5-sonnet' } },
+                        entities: {
+                            locations: ['Berlin, Germany'],
+                            aliases: ['cyb3r_w0lf', 'nullbyte_sys'],
+                            organizations: ['NullSec Collective']
+                        },
+                        report: DEMO_REPORTS["q-002"]
+                    },
+                    {
+                        query_id: 'q-003',
+                        query: 'Assess sentiment, tone, and psychological indicators',
+                        timestamp: '2025-01-14T16:44:11Z',
+                        metadata: { generated_utc: '2025-01-14T16:44:11Z', mode: 'Online', models: { text: 'claude-3.5-sonnet' } },
+                        entities: {
+                            organizations: ['Chaos Computer Club']
+                        },
+                        report: DEMO_REPORTS["q-003"]
+                    }
+                ]
+            },
+            {
+                session_id: 'sess-corp-002',
+                name: 'Corporate Intel — NexaCorp',
+                platforms: { twitter: ['nexacorp_ceo'], github: ['nexacorp-oss'], reddit: ['nexacorp_watchdog'] },
+                fetch_options: { default_count: 50, targets: {} },
+                target_count: 3,
+                query_count: 2,
+                query_history: [
+                    {
+                        query_id: 'q-004',
+                        query: 'Analyze posting patterns and behavioral indicators',
+                        timestamp: '2025-01-10T09:25:33Z',
+                        metadata: { generated_utc: '2025-01-10T09:25:33Z', mode: 'Online', models: { text: 'gpt-4o' } },
+                        entities: {
+                            locations: ['San Francisco, CA', 'Austin, TX'],
+                            email_addresses: ['ceo@nexacorp.io'],
+                            aliases: ['nexacorp_insider'],
+                            organizations: ['NexaCorp Inc.', 'NexaCorp Foundation']
+                        },
+                        report: DEMO_REPORTS["q-004"]
+                    },
+                    {
+                        query_id: 'q-005',
+                        query: 'Identify potential operational security vulnerabilities',
+                        timestamp: '2025-01-11T11:09:58Z',
+                        metadata: { generated_utc: '2025-01-11T11:09:58Z', mode: 'Online', models: { text: 'gpt-4o' } },
+                        entities: {
+                            locations: ['Kreuzberg, Berlin', 'San Francisco, CA'],
+                            email_addresses: ['ceo@nexacorp.io', 'security@nexacorp.io'],
+                            crypto_addresses: ['0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18'],
+                            aliases: ['nexacorp_insider', 'devOps_ninja'],
+                            organizations: ['NexaCorp Inc.']
+                        },
+                        report: DEMO_REPORTS["q-005"]
+                    }
+                ]
+            }
+        ];
+
+        const MOCK_CONTACTS = [
+            { username: 'cyb3r_w0lf.bsky.social', platform: 'bluesky', weight: 24, interaction_types: ['mention', 'retweet'], first_seen: '2024-11-05T08:12:00Z', last_seen: '2025-01-14T22:33:00Z' },
+            { username: 'nullbyte_sys', platform: 'github', weight: 18, interaction_types: ['repo_interaction'], first_seen: '2024-10-22T14:00:00Z', last_seen: '2025-01-13T19:45:00Z' },
+            { username: '0x_phantom', platform: 'twitter', weight: 15, interaction_types: ['mention'], first_seen: '2024-09-15T10:30:00Z', last_seen: '2025-01-12T16:20:00Z' },
+            { username: 'exploitdb_dev', platform: 'github', weight: 12, interaction_types: ['repo_interaction'], first_seen: '2024-08-20T11:00:00Z', last_seen: '2025-01-10T08:15:00Z' },
+            { username: 'sec.research.bsky.social', platform: 'bluesky', weight: 11, interaction_types: ['retweet'], first_seen: '2024-11-01T09:00:00Z', last_seen: '2025-01-14T20:10:00Z' },
+            { username: 'malware_hunter', platform: 'twitter', weight: 9, interaction_types: ['mention'], first_seen: '2024-10-05T15:45:00Z', last_seen: '2025-01-11T14:30:00Z' },
+            { username: 'netsec_mod', platform: 'reddit', weight: 7, interaction_types: ['mention'], first_seen: '2024-12-01T12:00:00Z', last_seen: '2025-01-09T18:00:00Z' },
+            { username: 'rootkit_archive', platform: 'github', weight: 6, interaction_types: ['repo_interaction'], first_seen: '2024-07-10T16:30:00Z', last_seen: '2025-01-08T11:20:00Z' },
+            { username: 'cti_analyst', platform: 'twitter', weight: 5, interaction_types: ['retweet'], first_seen: '2024-11-20T08:00:00Z', last_seen: '2025-01-07T13:45:00Z' },
+            { username: 'bugbounty.bsky.social', platform: 'bluesky', weight: 4, interaction_types: ['mention'], first_seen: '2024-12-10T10:00:00Z', last_seen: '2025-01-06T17:30:00Z' }
+        ];
+
+        const MOCK_CACHE = [
+            { platform: 'bluesky', username: 'thr3at.act0r.bsky.social', post_count: 47, media_found: 12, media_analyzed: 8, is_fresh: true, cached_at: '2025-01-14T10:00:00Z' },
+            { platform: 'github', username: 'sh4d0wdev', post_count: 120, media_found: 0, media_analyzed: 0, is_fresh: true, cached_at: '2025-01-14T10:00:00Z' },
+            { platform: 'twitter', username: 'darknet_res', post_count: 83, media_found: 24, media_analyzed: 18, is_fresh: false, cached_at: '2025-01-10T08:00:00Z' },
+            { platform: 'twitter', username: 'nexacorp_ceo', post_count: 156, media_found: 32, media_analyzed: 28, is_fresh: true, cached_at: '2025-01-14T12:00:00Z' },
+            { platform: 'github', username: 'nexacorp-oss', post_count: 234, media_found: 5, media_analyzed: 3, is_fresh: true, cached_at: '2025-01-14T12:00:00Z' },
+            { platform: 'reddit', username: 'nexacorp_watchdog', post_count: 42, media_found: 3, media_analyzed: 2, is_fresh: false, cached_at: '2025-01-09T06:00:00Z' }
+        ];
+
+        const MOCK_MEDIA = [
+            { path: 'media/terminal_screenshot_001.png', analysis: 'Terminal screenshot showing a Kali Linux desktop with multiple shell sessions. Visible IP addresses (redacted). Catppuccin Mocha color theme consistent with target profile. German keyboard layout detected.' },
+            { path: 'media/conference_photo_002.jpg', analysis: 'Photograph from a cybersecurity conference, likely CCC Camp 2024. Background shows Chaos Communication Club signage. Two individuals visible with faces partially obscured. EXIF data indicates Berlin timezone.' },
+            { path: 'media/code_snippet_003.png', analysis: 'Screenshot of Python code implementing a custom network scanner. Code style matches sh4d0wdev GitHub repositories. Uses Scapy library for packet manipulation. Comments in mixed English/German.' },
+            { path: 'media/map_location_004.jpg', analysis: 'Screenshot of a mapping application showing Kreuzberg, Berlin. Exact street view visible with identifiable landmarks. Suggests familiarity with the area. Posted from the darknet_res Twitter account.' },
+            { path: 'media/hardware_setup_005.jpg', analysis: 'Photograph of a hardware hacking workstation. Multiple SDR devices visible, Raspberry Pi clusters, and custom PCB boards. Suggests capabilities in radio frequency analysis and IoT security research.' },
+            { path: 'media/network_diagram_006.png', analysis: 'Network architecture diagram showing C2 infrastructure topology. Multiple proxy layers, encrypted tunnels, and dead-drop resolvers visible. Demonstrates advanced operational planning capability.' }
+        ];
+
+        function generateMockTimeline() {
+            const events = [];
+            const platforms = ['bluesky', 'github', 'twitter'];
+            const actions = ['post', 'reply', 'repost', 'commit', 'issue_comment', 'pull_request', 'tweet', 'retweet', 'thread'];
+            const users = ['thr3at.act0r.bsky.social', 'sh4d0wdev', 'darknet_res', 'cyb3r_w0lf.bsky.social', 'nullbyte_sys', '0x_phantom'];
+            const base = new Date('2024-12-01T08:00:00Z');
+            for (let i = 0; i < 45; i++) {
+                const offset = Math.floor(Math.random() * 45) * 86400000;
+                const hourOffset = Math.floor(Math.random() * 16) + 8;
+                const ts = new Date(base.getTime() + offset + hourOffset * 3600000);
+                events.push({
+                    timestamp: ts.toISOString(),
+                    platform: platforms[i % 3],
+                    username: users[i % users.length],
+                    action: actions[Math.floor(Math.random() * actions.length)],
+                    summary: `Activity on ${platforms[i % 3]} by ${users[i % users.length]}`
+                });
+            }
+            events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            return events;
+        }
+
+        const MOCK_TIMELINE = generateMockTimeline();
+
+        // ═══════════════ THEME ═══════════════
+        function applyTheme(t) {
+            state.theme = t;
+            document.documentElement.setAttribute('data-theme', t);
+            localStorage.setItem('osint-agent-theme', t);
+            const moon = document.getElementById('themeIconMoon');
+            const sun = document.getElementById('themeIconSun');
+            if (moon && sun) { moon.style.display = t === 'dark' ? '' : 'none'; sun.style.display = t === 'light' ? '' : 'none'; }
+            if (panelsInited) requestAnimationFrame(() => drawNetworkGraph());
+        }
+        function toggleTheme() { applyTheme(state.theme === 'dark' ? 'light' : 'dark'); }
+        function getCssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+        // ═══════════════ UTILS ═══════════════
+        function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;'); }
+        function fmtAge(iso) { if (!iso) return ''; const s = (Date.now() - new Date(iso)) / 1000; if (s < 60) return `${Math.round(s)}s ago`; if (s < 3600) return `${Math.round(s / 60)}m ago`; if (s < 86400) return `${Math.round(s / 3600)}h ago`; return `${Math.round(s / 86400)}d ago`; }
+        function fmtDate(iso) { if (!iso) return ''; return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+        function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i); return Math.abs(h); }
+
+        function toast(msg, type) {
+            type = type || 'success';
+            const c = document.getElementById('toastContainer');
+            const t = document.createElement('div');
+            t.className = 'toast ' + type;
+            const icons = { success: 'fa-check-circle', error: 'fa-exclamation-circle', info: 'fa-info-circle' };
+            t.innerHTML = '<i class="fa-solid ' + (icons[type] || icons.info) + '"></i> ' + esc(msg);
+            c.appendChild(t);
+            setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(20px)'; t.style.transition = 'all 0.3s'; setTimeout(() => t.remove(), 300); }, 3500);
+        }
+
+        function setStatus(running, text) {
+            const ind = document.getElementById('statusIndicator');
+            ind.style.display = running ? 'flex' : 'none';
+            if (text) document.getElementById('statusText').textContent = text;
+        }
+
+        // ═══════════════ PANEL SYSTEM ═══════════════
+
+        function getDefaultGroups() {
+            const cw = Math.max(600, document.getElementById('panelCanvas')?.clientWidth || 900);
+            const ch = Math.max(400, document.getElementById('panelCanvas')?.clientHeight || 600);
+            const rw = Math.round(cw * 0.56), rw2 = cw - rw - 12;
+            const th = Math.round(ch * 0.42), bh = ch - th - 12;
+            const hw = Math.round(rw2 * 0.48), cw2 = rw2 - hw - 12;
+            const conh = Math.round(bh * 0.65), enh = bh - conh - 12;
+            return [
+                { id: 'g0', panels: ['report'], active: 'report', x: 0, y: 0, w: rw, h: ch },
+                { id: 'g1', panels: ['timeline'], active: 'timeline', x: rw + 12, y: 0, w: rw2, h: th },
+                { id: 'g2', panels: ['history'], active: 'history', x: rw + 12, y: th + 12, w: hw, h: bh },
+                { id: 'g3', panels: ['contacts'], active: 'contacts', x: rw + 12 + hw + 12, y: th + 12, w: cw2, h: conh },
+                { id: 'g4', panels: ['entities'], active: 'entities', x: rw + 12 + hw + 12, y: th + 12 + conh + 12, w: cw2, h: enh },
+            ];
+        }
+
+        function loadSavedGroups() {
+            try {
+                const raw = localStorage.getItem(LS_LAYOUT_KEY);
+                if (!raw) return null;
+                const data = JSON.parse(raw);
+                if (data && data.version === 2 && Array.isArray(data.groups)) return data.groups;
+                return null;
+            } catch { return null; }
+        }
+
+        function savePanelLayout() {
+            const groups = [];
+            document.querySelectorAll('.panel-group').forEach(el => {
+                const panels = []; let active = null;
+                el.querySelectorAll('.pg-tab').forEach(t => { panels.push(t.dataset.panel); if (t.classList.contains('active')) active = t.dataset.panel; });
+                groups.push({
+                    id: el.dataset.groupId, panels, active: active || panels[0],
+                    x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth,
+                    h: el.classList.contains('collapsed') ? (parseFloat(el.dataset.savedH) || 300) : el.offsetHeight,
+                    collapsed: el.classList.contains('collapsed'), pinned: el.dataset.pinned === 'true',
+                });
+            });
+            localStorage.setItem(LS_LAYOUT_KEY, JSON.stringify({ version: 2, groups }));
+        }
+
+        function buildGroupEl(g) {
+            const el = document.createElement('div');
+            el.className = 'panel-group' + (g.collapsed ? ' collapsed' : '');
+            el.dataset.groupId = g.id;
+            el.dataset.savedH = g.h || 300;
+            if (g.pinned) el.dataset.pinned = 'true';
+            el.style.cssText = 'left:' + g.x + 'px;top:' + g.y + 'px;width:' + g.w + 'px;height:' + (g.collapsed ? 32 : g.h) + 'px;z-index:' + (++panelZCounter);
+
+            ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'].forEach(d => {
+                const rh = document.createElement('div'); rh.className = 'pg-rh pg-rh-' + d; rh.dataset.dir = d; el.appendChild(rh);
+            });
+
+            const dz = document.createElement('div'); dz.className = 'pg-drop-zone'; el.appendChild(dz);
+
+            const hdr = document.createElement('div'); hdr.className = 'pg-header';
+            const tabBar = document.createElement('div'); tabBar.className = 'pg-tabs';
+            g.panels.forEach(pid => {
+                const t = document.createElement('div');
+                t.className = 'pg-tab' + (pid === g.active ? ' active' : '');
+                t.dataset.panel = pid;
+                t.innerHTML = '<i class="fa-solid ' + (PANEL_ICONS[pid] || 'fa-cube') + '"></i><span class="pg-tab-label">' + (PANEL_TITLES[pid] || pid) + '</span>';
+                t.addEventListener('mousedown', e => startTabDrag(e, g.id, pid));
+                tabBar.appendChild(t);
+            });
+            hdr.appendChild(tabBar);
+
+            const acts = document.createElement('div'); acts.className = 'pg-actions';
+            acts.innerHTML = '<button class="fp-btn pg-pin-btn" onclick="toggleGroupPin(\'' + g.id + '\')" title="Pin"><i class="fa-solid fa-thumbtack"></i></button><button class="fp-btn" onclick="toggleGroupCollapse(\'' + g.id + '\')" title="Collapse"><i class="fa-solid fa-minus"></i></button>';
+            hdr.appendChild(acts);
+            el.appendChild(hdr);
+
+            const content = document.createElement('div'); content.className = 'pg-content';
+            g.panels.forEach(pid => {
+                const pane = document.createElement('div'); pane.className = 'pg-pane'; pane.dataset.panel = pid;
+                pane.style.display = pid === g.active ? '' : 'none';
+                content.appendChild(pane);
+            });
+            el.appendChild(content);
+
+            document.getElementById('panelCanvas').appendChild(el);
+            initGroupDrag(el);
+            initGroupResize(el);
+            el.addEventListener('mousedown', () => bringToFront(el));
+            return el;
+        }
+
+        function switchTab(groupId, panelId) {
+            const el = document.querySelector('.panel-group[data-group-id="' + groupId + '"]');
+            if (!el) return;
+            el.querySelectorAll('.pg-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === panelId));
+            el.querySelectorAll('.pg-pane').forEach(p => p.style.display = p.dataset.panel === panelId ? '' : 'none');
+            savePanelLayout();
+            if (panelId === 'contacts') requestAnimationFrame(() => drawNetworkGraph());
+            if (panelId === 'timeline') requestAnimationFrame(() => { if (state.timelineEvents?.length) updatePanelTimeline(); });
+        }
+
+        function bringToFront(el) {
+            document.querySelectorAll('.panel-group').forEach(p => p.classList.remove('active-panel'));
+            document.querySelectorAll('.panel-group:not([data-pinned="true"])').forEach(p => {
+                p.style.zIndex = Math.max(10, parseInt(p.style.zIndex || '10'));
+            });
+            const pinnedMax = Math.max(10, ...[...document.querySelectorAll('.panel-group[data-pinned="true"]')].map(p => parseInt(p.style.zIndex || '10')));
+            if (el.dataset.pinned === 'true') {
+                el.style.zIndex = Math.max(pinnedMax + 1, ++panelZCounter);
+            } else {
+                const unpinnedMax = Math.max(0, ...[...document.querySelectorAll('.panel-group:not([data-pinned="true"])')].map(p => parseInt(p.style.zIndex || '10')));
+                el.style.zIndex = Math.max(unpinnedMax + 1, ++panelZCounter);
+            }
+            el.classList.add('active-panel');
+        }
+
+        function toggleGroupPin(groupId) {
+            const el = document.querySelector('.panel-group[data-group-id="' + groupId + '"]');
+            if (!el) return;
+            el.dataset.pinned = el.dataset.pinned === 'true' ? 'false' : 'true';
+            restackZIndices();
+            savePanelLayout();
+        }
+
+        function restackZIndices() {
+            const pinned = [...document.querySelectorAll('.panel-group[data-pinned="true"]')];
+            const unpinned = [...document.querySelectorAll('.panel-group:not([data-pinned="true"])')];
+            let z = 10;
+            unpinned.forEach(g => g.style.zIndex = ++z);
+            pinned.forEach(g => g.style.zIndex = ++z);
+            panelZCounter = z;
+        }
+
+        function toggleGroupCollapse(groupId) {
+            const el = document.querySelector('.panel-group[data-group-id="' + groupId + '"]');
+            if (!el) return;
+            el.classList.toggle('collapsed');
+            if (!el.classList.contains('collapsed')) {
+                el.style.height = (parseFloat(el.dataset.savedH) || 300) + 'px';
+            }
+            savePanelLayout();
+            const activeTab = el.querySelector('.pg-tab.active');
+            if (activeTab?.dataset.panel === 'contacts') requestAnimationFrame(() => drawNetworkGraph());
+        }
+
+        function resetLayout() {
+            localStorage.removeItem(LS_LAYOUT_KEY);
+            document.querySelectorAll('.panel-group').forEach(p => p.remove());
+            panelsInited = false;
+            initPanels();
+            if (state.currentSession && state.activeQueryId) {
+                const entry = state.currentSession.query_history?.find(e => e.query_id === state.activeQueryId);
+                if (entry) updatePanelContents(entry);
+            }
+            toast('Layout reset', 'info');
+        }
+
+        function getOrCreateSnapGuide() {
+            let g = document.getElementById('snapGuide');
+            if (!g) { g = document.createElement('div'); g.id = 'snapGuide'; g.className = 'snap-guide'; g.style.display = 'none'; document.getElementById('panelCanvas')?.appendChild(g); }
+            return g;
+        }
+        function hideSnapGuide() { const g = document.getElementById('snapGuide'); if (g) g.style.display = 'none'; }
+
+        function calcSnap(el, newX, newY) {
+            const canvas = document.getElementById('panelCanvas');
+            const cw = canvas.clientWidth, ch = canvas.clientHeight;
+            const pw = el.offsetWidth, ph = el.offsetHeight;
+            let snapX = null, snapY = null;
+            if (Math.abs(newX) < SNAP_THRESHOLD) snapX = SNAP_PAD;
+            else if (Math.abs(newX + pw - cw) < SNAP_THRESHOLD) snapX = cw - pw - SNAP_PAD;
+            if (Math.abs(newY) < SNAP_THRESHOLD) snapY = SNAP_PAD;
+            else if (Math.abs(newY + ph - ch) < SNAP_THRESHOLD) snapY = ch - ph - SNAP_PAD;
+            document.querySelectorAll('.panel-group').forEach(other => {
+                if (other === el) return;
+                const ox = other.offsetLeft, oy = other.offsetTop, ow = other.offsetWidth, oh = other.offsetHeight;
+                const oR = ox + ow, oB = oy + oh, nR = newX + pw, nB = newY + ph;
+                if (snapX === null) {
+                    if (Math.abs(newX - ox) < SNAP_THRESHOLD) snapX = ox;
+                    else if (Math.abs(newX - oR) < SNAP_THRESHOLD) snapX = oR;
+                    else if (Math.abs(nR - ox) < SNAP_THRESHOLD) snapX = ox - pw;
+                    else if (Math.abs(nR - oR) < SNAP_THRESHOLD) snapX = oR - pw;
+                }
+                if (snapY === null) {
+                    if (Math.abs(newY - oy) < SNAP_THRESHOLD) snapY = oy;
+                    else if (Math.abs(newY - oB) < SNAP_THRESHOLD) snapY = oB;
+                    else if (Math.abs(nB - oy) < SNAP_THRESHOLD) snapY = oy - ph;
+                    else if (Math.abs(nB - oB) < SNAP_THRESHOLD) snapY = oB - ph;
+                }
+            });
+            if (snapX !== null) newX = snapX;
+            if (snapY !== null) newY = snapY;
+            const g = getOrCreateSnapGuide();
+            if (snapX !== null || snapY !== null) {
+                g.style.display = 'block';
+                if (snapX !== null && snapY !== null) { g.style.left = (snapX - 1) + 'px'; g.style.top = (snapY - 1) + 'px'; g.style.width = '2px'; g.style.height = '2px'; }
+                else if (snapX !== null) { g.style.left = (snapX - 1) + 'px'; g.style.top = '0'; g.style.width = '2px'; g.style.height = ch + 'px'; }
+                else { g.style.left = '0'; g.style.top = (snapY - 1) + 'px'; g.style.width = cw + 'px'; g.style.height = '2px'; }
+            } else { g.style.display = 'none'; }
+            return { x: newX, y: newY };
+        }
+
+        function findMergeTarget(dragEl, x, y, w, h) {
+            let best = null, bestArea = 0;
+            document.querySelectorAll('.panel-group').forEach(other => {
+                if (other === dragEl) return;
+                const ox = other.offsetLeft, oy = other.offsetTop, ow = other.offsetWidth, oh = other.offsetHeight;
+                const olX = Math.max(0, Math.min(x + w, ox + ow) - Math.max(x, ox));
+                const olY = Math.max(0, Math.min(y + h, oy + oh) - Math.max(y, oy));
+                const area = olX * olY;
+                if (area > bestArea) { bestArea = area; best = other; }
+            });
+            const dragA = w * h;
+            const thresh = Math.min(dragA, best ? best.offsetWidth * best.offsetHeight : 0) * 0.35;
+            return bestArea > thresh ? best : null;
+        }
+        function showMergeTarget(el) { el.querySelector('.pg-drop-zone')?.classList.add('show'); }
+        function hideMergeTargets() { document.querySelectorAll('.pg-drop-zone.show').forEach(d => d.classList.remove('show')); }
+
+        function doMerge(srcEl, tgtEl) {
+            const srcPanes = srcEl.querySelectorAll('.pg-pane');
+            const tgtContent = tgtEl.querySelector('.pg-content');
+            const tgtTabBar = tgtEl.querySelector('.pg-tabs');
+            const tgtId = tgtEl.dataset.groupId;
+            srcPanes.forEach(pane => {
+                pane.style.display = 'none';
+                tgtContent.appendChild(pane);
+                const pid = pane.dataset.panel;
+                const tab = document.createElement('div');
+                tab.className = 'pg-tab';
+                tab.dataset.panel = pid;
+                tab.innerHTML = '<i class="fa-solid ' + (PANEL_ICONS[pid] || 'fa-cube') + '"></i><span class="pg-tab-label">' + (PANEL_TITLES[pid] || pid) + '</span>';
+                tab.addEventListener('mousedown', e => startTabDrag(e, tgtId, pid));
+                tgtTabBar.appendChild(tab);
+                populatePaneBody(tgtEl, pid);
+            });
+            srcEl.remove();
+            const firstPid = srcPanes[0]?.dataset.panel;
+            if (firstPid) switchTab(tgtId, firstPid);
+            savePanelLayout();
+        }
+
+        function initGroupDrag(el) {
+            const hdr = el.querySelector('.pg-header');
+            let dragging = false, sx, sy, sL, sT;
+            function begin(cx, cy) {
+                if (el.dataset.pinned === 'true') return false;
+                dragging = true; sx = cx; sy = cy; sL = el.offsetLeft; sT = el.offsetTop; bringToFront(el); return true;
+            }
+            function move(cx, cy) {
+                if (!dragging) return;
+                const canvas = document.getElementById('panelCanvas');
+                const cw = canvas.clientWidth, ch = canvas.clientHeight, pw = el.offsetWidth, ph = el.offsetHeight;
+                let nx = Math.max(-pw + 60, Math.min(cw - 60, sL + cx - sx));
+                let ny = Math.max(0, Math.min(ch - 20, sT + cy - sy));
+                const s = calcSnap(el, nx, ny);
+                el.style.left = s.x + 'px'; el.style.top = s.y + 'px';
+                hideMergeTargets();
+                const mt = findMergeTarget(el, s.x, s.y, pw, ph);
+                if (mt) showMergeTarget(mt);
+            }
+            function end() {
+                if (!dragging) return; dragging = false; hideSnapGuide();
+                const mt = document.querySelector('.pg-drop-zone.show')?.closest('.panel-group');
+                hideMergeTargets();
+                if (mt && mt !== el) { doMerge(el, mt); }
+                else { savePanelLayout(); }
+            }
+            hdr.addEventListener('mousedown', e => {
+                if (e.target.closest('.fp-btn') || e.target.closest('.pg-tab')) return;
+                e.preventDefault(); begin(e.clientX, e.clientY);
+                const onM = ev => move(ev.clientX, ev.clientY);
+                const onU = () => { document.removeEventListener('mousemove', onM); document.removeEventListener('mouseup', onU); end(); };
+                document.addEventListener('mousemove', onM); document.addEventListener('mouseup', onU);
+            });
+            hdr.addEventListener('touchstart', e => {
+                if (e.target.closest('.fp-btn') || e.target.closest('.pg-tab')) return;
+                if (!begin(e.touches[0].clientX, e.touches[0].clientY)) return;
+                const onM = ev => { ev.preventDefault(); move(ev.touches[0].clientX, ev.touches[0].clientY); };
+                const onU = () => { document.removeEventListener('touchmove', onM); document.removeEventListener('touchend', onU); end(); };
+                document.addEventListener('touchmove', onM, { passive: false }); document.addEventListener('touchend', onU);
+            }, { passive: true });
+        }
+
+        function initGroupResize(el) {
+            const MIN_W = 220, MIN_H = 80;
+            function begin(cx, cy) {
+                if (el.dataset.pinned === 'true') return null;
+                bringToFront(el);
+                return { sx: cx, sy: cy, sL: el.offsetLeft, sT: el.offsetTop, sW: el.offsetWidth, sH: el.offsetHeight };
+            }
+            function apply(st, dir, cx, cy) {
+                if (!st) return;
+                const canvas = document.getElementById('panelCanvas');
+                const maxW = canvas.clientWidth, maxH = canvas.clientHeight;
+                const dx = cx - st.sx, dy = cy - st.sy;
+                let L = st.sL, T = st.sT, W = st.sW, H = st.sH;
+                if (dir.includes('e')) W = Math.max(MIN_W, Math.min(maxW - L, st.sW + dx));
+                if (dir.includes('w')) { const nw = Math.max(MIN_W, Math.min(st.sW - dx)); L = st.sL + st.sW - nw; W = nw; }
+                if (dir.includes('s')) H = Math.max(MIN_H, Math.min(maxH - T, st.sH + dy));
+                if (dir.includes('n') && !el.classList.contains('collapsed')) { const nh = Math.max(MIN_H, Math.min(st.sH - dy)); T = st.sT + st.sH - nh; H = nh; }
+                el.style.left = L + 'px'; el.style.top = T + 'px'; el.style.width = W + 'px'; el.style.height = H + 'px';
+            }
+            el.querySelectorAll('.pg-rh').forEach(rh => {
+                rh.addEventListener('mousedown', e => {
+                    e.preventDefault(); e.stopPropagation();
+                    const st = begin(e.clientX, e.clientY); if (!st) return;
+                    const dir = rh.dataset.dir;
+                    const onM = ev => apply(st, dir, ev.clientX, ev.clientY);
+                    const onU = () => { document.removeEventListener('mousemove', onM); document.removeEventListener('mouseup', onU); savePanelLayout(); };
+                    document.addEventListener('mousemove', onM); document.addEventListener('mouseup', onU);
+                });
+                rh.addEventListener('touchstart', e => {
+                    e.preventDefault(); e.stopPropagation();
+                    const st = begin(e.touches[0].clientX, e.touches[0].clientY); if (!st) return;
+                    const dir = rh.dataset.dir;
+                    const onM = ev => { ev.preventDefault(); apply(st, dir, ev.touches[0].clientX, ev.touches[0].clientY); };
+                    const onU = () => { document.removeEventListener('touchmove', onM); document.removeEventListener('touchend', onU); savePanelLayout(); };
+                    document.addEventListener('touchmove', onM, { passive: false }); document.addEventListener('touchend', onU);
+                }, { passive: false });
+            });
+        }
+
+        function startTabDrag(e, groupId, panelId) {
+            if (e.button !== 0) return;
+            const el = document.querySelector('.panel-group[data-group-id="' + groupId + '"]');
+            if (!el || el.querySelectorAll('.pg-tab').length <= 1) return;
+            const isPinned = el.dataset.pinned === 'true';
+            if (isPinned) { switchTab(groupId, panelId); return; }
+            e.preventDefault();
+            const sx = e.clientX, sy = e.clientY;
+            let detached = false, lx = sx, ly = sy, ghost = null;
+
+            function onM(ev) {
+                lx = ev.clientX; ly = ev.clientY;
+                if (!detached && (Math.abs(lx - sx) > 8 || Math.abs(ly - sy) > 8)) {
+                    detached = true;
+                    ghost = document.createElement('div');
+                    ghost.className = 'panel-group detach-ghost';
+                    ghost.innerHTML = '<div class="pg-header"><div class="pg-tabs"><div class="pg-tab active"><i class="fa-solid ' + (PANEL_ICONS[panelId] || 'fa-cube') + '"></i><span class="pg-tab-label">' + (PANEL_TITLES[panelId] || panelId) + '</span></div></div></div>';
+                    document.body.appendChild(ghost);
+                    el.querySelectorAll('.pg-pane').forEach(p => { if (p.dataset.panel === panelId) p.style.display = 'none'; });
+                    const first = el.querySelector('.pg-tab:not([data-panel="' + panelId + '"])');
+                    if (first) switchTab(groupId, first.dataset.panel);
+                }
+                if (detached && ghost) {
+                    ghost.style.left = (lx - 150) + 'px'; ghost.style.top = (ly - 20) + 'px';
+                    hideMergeTargets();
+                    document.querySelectorAll('.panel-group').forEach(g => {
+                        if (g === el) return;
+                        const gr = g.getBoundingClientRect();
+                        const olX = Math.max(0, Math.min(lx, gr.right) - Math.max(lx - 300, gr.left));
+                        const olY = Math.max(0, Math.min(ly, gr.bottom) - Math.max(ly - 200, gr.top));
+                        if (olX * olY > 3000) showMergeTarget(g);
+                    });
+                }
+            }
+            function onU() {
+                document.removeEventListener('mousemove', onM); document.removeEventListener('mouseup', onU);
+                if (ghost) ghost.remove();
+                hideMergeTargets();
+                if (!detached) { switchTab(groupId, panelId); return; }
+                const canvas = document.getElementById('panelCanvas');
+                const r = canvas.getBoundingClientRect();
+                const cx = lx - r.left, cy = ly - r.top;
+                const mergeTarget = document.querySelector('.pg-drop-zone.show')?.closest('.panel-group');
+                if (mergeTarget && mergeTarget !== el) {
+                    const pane = el.querySelector('.pg-pane[data-panel="' + panelId + '"]');
+                    const tab = el.querySelector('.pg-tab[data-panel="' + panelId + '"]');
+                    pane.style.display = 'none';
+                    mergeTarget.querySelector('.pg-content').appendChild(pane);
+                    const nt = document.createElement('div'); nt.className = 'pg-tab'; nt.dataset.panel = panelId;
+                    nt.innerHTML = '<i class="fa-solid ' + (PANEL_ICONS[panelId] || 'fa-cube') + '"></i><span class="pg-tab-label">' + (PANEL_TITLES[panelId] || panelId) + '</span>';
+                    nt.addEventListener('mousedown', e2 => startTabDrag(e2, mergeTarget.dataset.groupId, panelId));
+                    mergeTarget.querySelector('.pg-tabs').appendChild(nt);
+                    tab.remove();
+                    populatePaneBody(mergeTarget, panelId);
+                    switchTab(mergeTarget.dataset.groupId, panelId);
+                } else if (cx > 0 && cy > 0 && cx < r.width && cy < r.height) {
+                    const nw = Math.min(400, r.width * 0.4), nh = Math.min(300, r.height * 0.4);
+                    let nx = Math.max(0, Math.min(r.width - nw, cx - nw / 2));
+                    let ny = Math.max(0, Math.min(r.height - nh, cy - nh / 2));
+                    const newG = { id: 'g' + Date.now(), panels: [panelId], active: panelId, x: Math.round(nx), y: Math.round(ny), w: Math.round(nw), h: Math.round(nh) };
+                    const newEl = buildGroupEl(newG);
+                    const autoPane = newEl.querySelector('.pg-pane[data-panel="' + panelId + '"]');
+                    if (autoPane) autoPane.remove();
+                    const pane = el.querySelector('.pg-pane[data-panel="' + panelId + '"]');
+                    pane.style.display = '';
+                    newEl.querySelector('.pg-content').appendChild(pane);
+                    el.querySelector('.pg-tab[data-panel="' + panelId + '"]').remove();
+                    bringToFront(newEl);
+                } else {
+                    const pane = el.querySelector('.pg-pane[data-panel="' + panelId + '"]');
+                    pane.style.display = '';
+                    el.querySelector('.pg-tab[data-panel="' + panelId + '"]').classList.add('active');
+                }
+                if (el.querySelectorAll('.pg-tab').length === 0) el.remove();
+                savePanelLayout();
+            }
+            document.addEventListener('mousemove', onM); document.addEventListener('mouseup', onU);
+        }
+
+        function populatePaneBody(groupEl, pid) {
+            const pane = groupEl.querySelector('.pg-pane[data-panel="' + pid + '"]');
+            if (!pane || pane.querySelector('.fp-body')) return;
+            const body = document.createElement('div'); body.className = 'fp-body'; body.id = 'fpBody_' + pid;
+            if (pid === 'report') body.innerHTML = '<div class="fp-scroll" id="fpReportMarkdown"></div>';
+            else if (pid === 'timeline') body.innerHTML = '<div class="fp-scroll"><div class="timeline-section"><div class="timeline-title">Chronological Activity</div><div class="timeline-subtitle">Posts over time across all targets.</div><div id="fpChrono"></div></div><hr class="timeline-divider"><div class="timeline-section"><div class="timeline-title">Pattern of Life</div><div class="timeline-subtitle">Post frequency by day &times; hour (UTC).</div><div id="fpHeatmap"></div></div></div>';
+            else if (pid === 'history') body.innerHTML = '<div class="fp-scroll" id="fpHistory"></div>';
+            else if (pid === 'contacts') {
+                body.innerHTML = '<div class="fp-contacts-panel"><div class="fp-contacts-toolbar"><input type="text" id="fpContactsSearch" placeholder="Filter contacts..."></div><div class="fp-graph-container" id="fpGraphContainer"></div><div class="fp-contacts-list" id="fpContactsList"></div></div>';
+                const s = body.querySelector('#fpContactsSearch');
+                if (s) s.addEventListener('input', e => { state.panelFilter = e.target.value.toLowerCase(); renderPanelContacts(); });
+            }
+            else if (pid === 'entities') body.innerHTML = '<div class="fp-scroll" id="fpEntities"></div>';
+            pane.appendChild(body);
+        }
+
+        function populateAllPaneBodies() {
+            document.querySelectorAll('.panel-group').forEach(g => {
+                g.querySelectorAll('.pg-pane').forEach(pane => { populatePaneBody(g, pane.dataset.panel); });
+            });
+        }
+
+        function setupPanelResizeObservers() {
+            const tlBody = document.getElementById('fpBody_timeline');
+            if (tlBody) new ResizeObserver(() => { if (state.timelineEvents?.length) updatePanelTimeline(); }).observe(tlBody);
+            const gc = document.getElementById('fpGraphContainer');
+            if (gc) new ResizeObserver(() => drawNetworkGraph()).observe(gc);
+        }
+
+        function initPanels() {
+            if (panelsInited) return;
+            const groups = loadSavedGroups() || getDefaultGroups();
+            groups.forEach(g => buildGroupEl(g));
+            populateAllPaneBodies();
+            setupPanelResizeObservers();
+            panelsInited = true;
+        }
+
+        // ═══════════════ NAVIGATION ═══════════════
+        function switchPage(page) {
+            state.activePage = page;
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            const el = document.getElementById('page-' + page);
+            if (el) el.classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+            if (page === 'contacts') renderContacts();
+            if (page === 'cache') renderCache();
+            if (page === 'dashboard') renderDashboard();
+            if (page === 'media') renderMedia();
+        }
+
+        // ═══════════════ SESSIONS ═══════════════
+        function renderSessions() {
+            const list = document.getElementById('sessionList');
+            if (!state.sessions.length) { list.innerHTML = '<div class="empty-state" style="padding:20px;"><p>No sessions yet</p></div>'; return; }
+            list.innerHTML = state.sessions.map(s => {
+                const color = COLORS[hashStr(s.session_id) % COLORS.length];
+                const isActive = state.currentSession?.session_id === s.session_id;
+                return '<div class="session-item ' + (isActive ? 'active' : '') + '" onclick="loadSession(\'' + s.session_id + '\')"><div class="session-dot" style="background:' + color + '"></div><div class="session-info"><div class="session-name">' + esc(s.name) + '</div><div class="session-meta">' + (s.target_count || 0) + ' target' + ((s.target_count || 0) !== 1 ? 's' : '') + ' · ' + (s.query_count || 0) + ' report' + ((s.query_count || 0) !== 1 ? 's' : '') + '</div></div></div>';
+            }).join('');
+            document.getElementById('statSessions').textContent = state.sessions.length;
+        }
+
+        function refreshSessionList() {
+            state.sessions = JSON.parse(JSON.stringify(MOCK_SESSIONS));
+            renderSessions();
+        }
+
+        function loadSession(id) {
+            const session = MOCK_SESSIONS.find(s => s.session_id === id);
+            if (!session) { toast('Session not found', 'error'); return; }
+            state.currentSession = JSON.parse(JSON.stringify(session));
+            state.activeQueryId = null;
+            renderSessions();
+            loadCacheStatus();
+            loadContacts();
+            loadMedia();
+            loadTimeline();
+            renderTargetChips();
+            if (session.query_history?.length) {
+                const latest = session.query_history[session.query_history.length - 1];
+                state.activeQueryId = latest.query_id;
+                viewReport(latest);
+            } else {
+                switchPage('report');
+                document.getElementById('reportQueryText').innerHTML = '<code>Session: ' + esc(session.name) + '</code>';
+                document.getElementById('reportSessionName').textContent = 'No reports yet';
+                document.getElementById('reportMetaRow').innerHTML = '';
+                requestAnimationFrame(() => {
+                    initPanels();
+                    const md = document.getElementById('fpReportMarkdown');
+                    if (md) md.innerHTML = '<div class="panel-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;"><i class="fa-solid fa-bolt" style="font-size:32px;color:var(--accent);opacity:0.6;"></i><div style="font-size:14px;color:var(--fg-muted);">Enter a query and run analysis to generate your first report.</div></div>';
+                    updatePanelHistory();
+                    renderPanelContacts();
+                    updatePanelEntities({});
+                    updatePanelTimeline();
+                });
+            }
+        }
+
+        function addTargetInline() { toast('Demo mode - targets are pre-loaded', 'info'); }
+        function removeTarget() { toast('Demo mode - targets are pre-loaded', 'info'); }
+
+        // ═══════════════ TARGETS ═══════════════
+        function getTargetCacheStatus(platform, username) { const entry = state.cacheEntries.find(c => c.platform === platform && c.username === username); if (!entry) return 'absent'; return entry.is_fresh ? 'fresh' : 'stale'; }
+
+        function renderTargetChips() {
+            const s = state.currentSession; const bar = document.getElementById('targetChipsBar'); const container = document.getElementById('targetChips'); const queryBar = document.getElementById('queryBar');
+            if (!s) { if (bar) bar.style.display = 'none'; if (queryBar) queryBar.style.display = 'none'; return; }
+            if (bar) bar.style.display = ''; if (queryBar) queryBar.style.display = '';
+            const targets = []; for (const [platform, users] of Object.entries(s.platforms || {})) for (const username of users) targets.push({ platform, username, status: getTargetCacheStatus(platform, username) });
+            if (!container) return;
+            if (!targets.length) { container.innerHTML = '<span style="font-size:11px;color:var(--fg-dim);">No targets</span>'; return; }
+            container.innerHTML = targets.map(t => '<div class="target-chip" title="' + esc(t.platform) + '/' + esc(t.username) + '"><span class="chip-dot ' + t.status + '"></span><span class="chip-platform">' + esc(t.platform) + '</span><span class="chip-name">' + esc(t.username) + '</span></div>').join('');
+        }
+
+        // ═══════════════ REPORT VIEW ═══════════════
+        function viewReport(entry) {
+            switchPage('report');
+            const s = state.currentSession; const meta = entry.metadata || {}; const generated = meta.generated_utc || entry.timestamp || ''; const model = meta.models ? (meta.models.text || '') : ''; const mode = meta.mode || '';
+            document.getElementById('reportQueryText').innerHTML = '<code>' + esc(entry.query) + '</code>';
+            document.getElementById('reportSessionName').textContent = 'Session: ' + (s?.name || 'Unknown');
+            let metaHtml = '<div class="report-meta-item"><i class="fa-solid fa-clock"></i> <strong>' + esc(generated) + '</strong></div>';
+            if (mode) metaHtml += '<div class="report-meta-item"><i class="fa-solid fa-wifi"></i> Mode: <strong>' + esc(mode) + '</strong></div>';
+            if (model) metaHtml += '<div class="report-meta-item"><i class="fa-solid fa-microchip"></i> <strong>' + esc(model) + '</strong></div>';
+            document.getElementById('reportMetaRow').innerHTML = metaHtml;
+            requestAnimationFrame(() => {
+                initPanels();
+                updatePanelContents(entry);
+            });
+        }
+
+        function updatePanelContents(entry) {
+            const md = document.getElementById('fpReportMarkdown');
+            if (md) md.innerHTML = marked.parse(entry.report || '*(no content)*');
+            updatePanelHistory();
+            renderPanelContacts();
+            updatePanelEntities(entry.entities || {});
+            requestAnimationFrame(() => { updatePanelTimeline(); drawNetworkGraph(); });
+        }
+
+        function viewReportById(qid) { const s = state.currentSession; if (!s) return; const entry = s.query_history?.find(e => e.query_id === qid); if (entry) { state.activeQueryId = qid; viewReport(entry); } }
+
+        function copyReport() { const s = state.currentSession; if (!s) return; const entry = s.query_history?.find(e => e.query_id === state.activeQueryId); if (!entry) { toast('No report', 'info'); return; } navigator.clipboard.writeText(entry.report || '').then(() => toast('Copied', 'success')); }
+
+        function downloadReport() {
+            const s = state.currentSession; if (!s) return; const entry = s.query_history?.find(e => e.query_id === state.activeQueryId); if (!entry) { toast('No report', 'info'); return; }
+            const meta = entry.metadata || {};
+            const header = '# ' + entry.query + '\n\n**Generated:** ' + (meta.generated_utc || entry.timestamp || '') + '\n**Session:** ' + s.name + '\n**Mode:** ' + (meta.mode || 'N/A') + '\n**Model:** ' + (meta.models?.text || 'N/A') + '\n\n---\n\n';
+            const blob = new Blob([header + (entry.report || '')], { type: 'text/markdown' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); const ts = (entry.timestamp || Date.now()).replace(/[:.]/g, '-').slice(0, 19); a.download = s.name.replace(/[^a-zA-Z0-9]/g, '_') + '_' + ts + '.md';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href); toast('Downloaded', 'success');
+        }
+
+        // ═══════════════ PANEL: HISTORY ═══════════════
+        function updatePanelHistory() {
+            const el = document.getElementById('fpHistory'); if (!el) return;
+            const s = state.currentSession; if (!s) { el.innerHTML = '<div class="panel-empty">No session.</div>'; return; }
+            const history = s.query_history || []; if (!history.length) { el.innerHTML = '<div class="panel-empty">No queries yet.</div>'; return; }
+            el.innerHTML = [...history].reverse().map(e => '<div class="fp-history-item ' + (state.activeQueryId === e.query_id ? 'active' : '') + '" onclick="viewReportById(\'' + e.query_id + '\')"><div class="fp-history-query">' + esc(e.query) + '</div><div class="fp-history-ts">' + fmtDate(e.timestamp) + '</div></div>').join('');
+        }
+
+        // ═══════════════ PANEL: CONTACTS ═══════════════
+        function renderPanelContacts() {
+            const list = document.getElementById('fpContactsList'); if (!list) return;
+            let contacts = state.contacts || [];
+            if (state.panelFilter) contacts = contacts.filter(c => c.username.toLowerCase().includes(state.panelFilter) || c.platform.toLowerCase().includes(state.panelFilter));
+            if (!contacts.length) { list.innerHTML = '<div class="panel-empty">No contacts found.</div>'; return; }
+            const s = state.currentSession; const maxW = Math.max(...contacts.map(c => c.weight), 1);
+            list.innerHTML = contacts.map(c => {
+                const bw = Math.max(8, Math.round(c.weight / maxW * 100));
+                const itypes = (c.interaction_types || []).map(t => '<span class="fp-itype ' + t + '">' + esc(t.replace('_', ' ')) + '</span>').join('');
+                const inSession = s && (s.platforms || {})[c.platform]?.includes(c.username);
+                const btn = inSession
+                    ? '<button class="fp-contact-add in-session" disabled><i class="fa-solid fa-check"></i></button>'
+                    : '<button class="fp-contact-add" onclick="toast(\'Demo mode - contacts are pre-loaded\',\'info\')"><i class="fa-solid fa-plus"></i></button>';
+                return '<div class="fp-contact-row"><div class="fp-contact-avatar">' + esc(c.username.slice(0, 2).toUpperCase()) + '</div><div class="fp-contact-info"><div class="fp-contact-name">' + esc(c.username) + '</div><div class="fp-contact-detail"><span class="fp-plat-badge">' + esc(c.platform) + '</span> ' + itypes + '</div></div><div class="fp-contact-weight"><div class="weight-bar-wrap"><div class="weight-bar" style="width:' + bw + '%"></div></div><span class="weight-num">' + c.weight + '</span></div>' + btn + '</div>';
+            }).join('');
+        }
+
+        // ═══════════════ PANEL: ENTITIES ═══════════════
+        function updatePanelEntities(entities) {
+            const c = document.getElementById('fpEntities'); if (!c) return;
+            const nonEmpty = Object.keys(entities || {}).filter(k => entities[k]?.length);
+            if (!nonEmpty.length) { c.innerHTML = '<div class="panel-empty">No entities extracted.</div>'; return; }
+            c.innerHTML = nonEmpty.map(k => '<div class="fp-entity-group"><div class="fp-entity-title">' + esc(k) + '</div>' + entities[k].map(v => '<span class="fp-entity-pill">' + esc(v) + '</span>').join('') + '</div>').join('');
+        }
+
+        // ═══════════════ PANEL: TIMELINE ═══════════════
+        function updatePanelTimeline() { const events = state.timelineEvents || []; renderChrono(events); renderHeatmapPanel(events); }
+
+        function renderChrono(events) {
+            const el = document.getElementById('fpChrono'); if (!el) return; el.innerHTML = '';
+            if (!events.length) { el.innerHTML = '<div class="panel-empty" style="padding:16px 0">No timeline data.</div>'; return; }
+            const formatDate = d3.timeFormat('%Y-%m-%d');
+            const daily = {}; events.forEach(e => { const d = formatDate(new Date(e.timestamp)); daily[d] = (daily[d] || 0) + 1; });
+            const data = Object.keys(daily).map(d => ({ date: d3.timeParse('%Y-%m-%d')(d), count: daily[d] })).sort((a, b) => a.date - b.date);
+            const W = el.clientWidth || 400, H = 140; if (W < 50) return;
+            const m = { top: 8, right: 12, bottom: 22, left: 28 }; const w = W - m.left - m.right, h = H - m.top - m.bottom; if (w < 30 || h < 20) return;
+            const x = d3.scaleTime().domain(d3.extent(data, d => d.date)).range([0, w]); const y = d3.scaleLinear().domain([0, d3.max(data, d => d.count)]).range([h, 0]);
+            const svg = d3.select(el).append('svg').attr('width', W).attr('height', H).append('g').attr('transform', 'translate(' + m.left + ',' + m.top + ')');
+            svg.append('g').attr('class', 'axis').attr('transform', 'translate(0,' + h + ')').call(d3.axisBottom(x).ticks(5));
+            svg.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(4).tickFormat(d3.format('d')));
+            const bw = Math.max(2, w / data.length - 1); const tooltip = d3.select('#d3Tooltip');
+            svg.selectAll('.bar').data(data).enter().append('rect').attr('class', 'bar').attr('x', d => x(d.date) - bw / 2).attr('y', d => y(d.count)).attr('width', bw).attr('height', d => h - y(d.count))
+                .on('mouseover', (ev, d) => { tooltip.transition().duration(100).style('opacity', 1); tooltip.html('<strong>' + formatDate(d.date) + '</strong><br>' + d.count + ' posts').style('left', (ev.clientX - 30) + 'px').style('top', (ev.clientY - 48) + 'px'); })
+                .on('mouseout', () => tooltip.transition().duration(200).style('opacity', 0));
+        }
+
+        function renderHeatmapPanel(events) {
+            const el = document.getElementById('fpHeatmap'); if (!el) return; el.innerHTML = '';
+            if (!events.length) { el.innerHTML = '<div class="panel-empty" style="padding:16px 0">No activity data.</div>'; return; }
+            const matrix = Array.from({ length: 7 }, () => Array(24).fill(0)); let mx = 1;
+            events.forEach(e => { const dt = new Date(e.timestamp); matrix[dt.getUTCDay()][dt.getUTCHours()]++; if (matrix[dt.getUTCDay()][dt.getUTCHours()] > mx) mx = matrix[dt.getUTCDay()][dt.getUTCHours()]; });
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            let heatR = '0', heatG = '229', heatB = '155';
+            try { const tmp = document.createElement('div'); tmp.style.color = getCssVar('--accent'); document.body.appendChild(tmp); const c = getComputedStyle(tmp).color; document.body.removeChild(tmp); const m = c.match(/\d+/g); if (m) { heatR = m[0]; heatG = m[1]; heatB = m[2]; } } catch { }
+            let html = '<div class="heatmap-grid"><div style="grid-column:2/26;display:flex;justify-content:space-between;font-size:9px;color:var(--fg-dim);margin-bottom:4px"><span>00:00</span><span>12:00</span><span>23:00</span></div>';
+            for (let d = 0; d < 7; d++) { html += '<div class="heatmap-label">' + days[d] + '</div>'; for (let h = 0; h < 24; h++) { const v = matrix[d][h]; const op = v === 0 ? 0.05 : Math.max(0.15, v / mx); html += '<div class="heatmap-cell" style="background:rgba(' + heatR + ',' + heatG + ',' + heatB + ',' + op + ')" title="' + days[d] + ' ' + String(h).padStart(2, '0') + ':00 — ' + v + '"></div>'; } }
+            html += '</div>'; el.innerHTML = html;
+        }
+
+        // ═══════════════ D3 NETWORK GRAPH ═══════════════
+        let graphZoom = null;
+
+        function drawNetworkGraph() {
+            const container = document.getElementById('fpGraphContainer'); if (!container) return;
+            container.querySelectorAll('svg').forEach(s => s.remove());
+            container.querySelectorAll('.graph-empty,.graph-zoom-ctrl').forEach(e => e.remove());
+            const s = state.currentSession; const contacts = state.contacts || [];
+            if (!s || !contacts.length) { container.innerHTML = '<div class="graph-empty"><i class="fa-solid fa-diagram-project"></i><span>Run analysis to build graph</span></div>'; return; }
+            const W = container.clientWidth || 240, H = container.clientHeight || 160; if (W < 30 || H < 30) return;
+            const accentColor = getCssVar('--accent'), borderMedium = getCssVar('--border-light'), bgRaised = getCssVar('--bg-card-hover'), bgSurface = getCssVar('--bg-card'), textSec = getCssVar('--fg-muted');
+            const sourceNodes = []; for (const [platform, users] of Object.entries(s.platforms || {})) for (const u of users) sourceNodes.push({ id: platform + '/' + u, label: u, type: 'source' });
+            const allIds = new Set(sourceNodes.map(n => n.id));
+            const contactNodes = contacts.slice(0, 30).map(c => ({ id: c.platform + '/' + c.username, label: c.username, type: 'contact', weight: c.weight })).filter(n => !allIds.has(n.id));
+            const nodes = [...sourceNodes, ...contactNodes]; const validIds = new Set(nodes.map(n => n.id));
+            const maxW = Math.max(...contacts.map(c => c.weight), 1);
+            const links = []; contacts.slice(0, 30).forEach(c => { const cId = c.platform + '/' + c.username; sourceNodes.forEach(src => { if (src.id.split('/')[0] === c.platform && validIds.has(cId)) links.push({ source: src.id, target: cId, weight: c.weight }); }); });
+            const validLinks = links.filter(l => validIds.has(l.source) && validIds.has(l.target));
+
+            const svg = d3.select(container).append('svg').attr('width', W).attr('height', H);
+            const zoomG = svg.append('g');
+            const zoomBehavior = d3.zoom().scaleExtent([0.3, 5]).on('zoom', ev => zoomG.attr('transform', ev.transform));
+            svg.call(zoomBehavior);
+            svg.on('dblclick.zoom', null);
+            graphZoom = { behavior: zoomBehavior, svg, zoomG };
+
+            const sim = d3.forceSimulation(nodes).force('link', d3.forceLink(validLinks).id(d => d.id).distance(50).strength(0.5)).force('charge', d3.forceManyBody().strength(-80)).force('center', d3.forceCenter(W / 2, H / 2)).force('collision', d3.forceCollide(14));
+            const link = zoomG.append('g').selectAll('line').data(validLinks).join('line').attr('class', 'graph-link').style('stroke-width', d => 0.5 + (d.weight / maxW) * 1.8);
+            const node = zoomG.append('g').selectAll('g').data(nodes).join('g').attr('class', d => d.type === 'source' ? 'node-source' : 'node-contact')
+                .call(d3.drag().on('start', (ev, d) => { const t = d3.zoomTransform(svg.node()); if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('drag', (ev, d) => { const t = d3.zoomTransform(svg.node()); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+            node.append('circle').attr('r', d => d.type === 'source' ? 9 : 5 + (d.weight || 1) / maxW * 4).style('fill', d => d.type === 'source' ? accentColor : bgRaised).style('stroke', d => d.type === 'source' ? bgSurface : borderMedium).style('stroke-width', d => d.type === 'source' ? '2.5px' : '1.5px');
+            node.append('text').attr('class', 'node-label').attr('dy', d => -(d.type === 'source' ? 12 : 10)).attr('text-anchor', 'middle').style('fill', textSec).text(d => d.label.length > 11 ? d.label.slice(0, 10) + '\u2026' : d.label);
+            sim.on('tick', () => { link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y); node.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')'); });
+
+            const ctrl = document.createElement('div'); ctrl.className = 'graph-zoom-ctrl';
+            ctrl.innerHTML = '<button class="gz-btn" onclick="graphZoomIn()" title="Zoom in"><i class="fa-solid fa-plus"></i></button><button class="gz-btn" onclick="graphZoomOut()" title="Zoom out"><i class="fa-solid fa-minus"></i></button><button class="gz-btn" onclick="graphZoomReset()" title="Reset view"><i class="fa-solid fa-expand"></i></button><button class="gz-btn" onclick="graphSpread()" title="Spread nodes"><i class="fa-solid fa-arrows-up-down-left-right"></i></button>';
+            container.appendChild(ctrl);
+        }
+
+        function graphZoomIn() { if (!graphZoom) return; graphZoom.svg.transition().duration(250).call(graphZoom.behavior.scaleBy, 1.4); }
+        function graphZoomOut() { if (!graphZoom) return; graphZoom.svg.transition().duration(250).call(graphZoom.behavior.scaleBy, 1 / 1.4); }
+        function graphZoomReset() { if (!graphZoom) return; graphZoom.svg.transition().duration(350).call(graphZoom.behavior.transform, d3.zoomIdentity); }
+        function graphSpread() { if (!graphZoom) return; graphZoom.svg.transition().duration(350).call(graphZoom.behavior.transform, d3.zoomIdentity); drawNetworkGraph(); }
+
+        // ═══════════════ DASHBOARD ═══════════════
+        function renderDashboard() {
+            const allReports = [];
+            (state.sessions || []).forEach(s => { (s.recent_queries || s.query_history || []).forEach(q => { allReports.push({ ...q, sessionName: s.name, sessionId: s.session_id }); }); });
+            allReports.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+            document.getElementById('statReports').textContent = allReports.length;
+            document.getElementById('statContacts').textContent = state.contacts.length;
+            document.getElementById('statCache').textContent = state.cacheEntries.length;
+            const list = document.getElementById('recentReportsList');
+            if (!allReports.length) { list.innerHTML = '<div class="empty-state"><i class="fa-solid fa-file-lines"></i><p>No reports yet.</p></div>'; }
+            else { list.innerHTML = allReports.slice(0, 10).map(r => '<div class="report-list-item" onclick="loadSession(\'' + r.sessionId + '\');setTimeout(function(){viewReportById(\'' + r.query_id + '\')},100)"><div class="rli-icon platform-icon"><i class="fa-solid fa-feather"></i></div><div class="rli-info"><div class="rli-query">' + esc(r.query) + '</div><div class="rli-meta">' + esc(r.sessionName) + ' &middot; ' + fmtDate(r.timestamp) + '</div></div></div>').join(''); }
+            const sList = document.getElementById('dashSessionList'); if (!sList) return;
+            if (!state.sessions.length) { sList.innerHTML = '<div class="empty-state" style="padding:30px 10px;"><i class="fa-solid fa-folder-open" style="font-size:28px;"></i><p>No sessions yet.</p></div>'; }
+            else { sList.innerHTML = state.sessions.map(s => { const targets = []; for (const [p, users] of Object.entries(s.platforms || {})) for (const u of users) targets.push({ platform: p, username: u }); return '<div class="dash-session-card" onclick="loadSession(\'' + s.session_id + '\')"><div class="dsc-name">' + esc(s.name) + '</div><div class="dsc-meta">' + targets.length + ' target' + (targets.length !== 1 ? 's' : '') + ' &middot; ' + (s.query_count || 0) + ' report' + ((s.query_count || 0) !== 1 ? 's' : '') + '</div><div class="dsc-targets">' + targets.slice(0, 5).map(t => '<span class="dsc-target">' + esc(t.platform) + '/' + esc(t.username) + '</span>').join('') + (targets.length > 5 ? '<span class="dsc-target">+' + (targets.length - 5) + '</span>' : '') + '</div></div>'; }).join(''); }
+        }
+
+        // ═══════════════ ANALYSIS (DEMO) ═══════════════
+        function runAnalysis() {
+            if (!state.currentSession) { toast('Select or create a session first', 'error'); return; }
+            const s = state.currentSession; const qi = document.getElementById('queryInput'); const query = (qi ? qi.value : '').trim();
+            if (!query) { toast('Enter an analysis query', 'error'); qi && qi.focus(); return; }
+            if (qi) { qi.value = ''; qi.disabled = true; } const runBtn = document.getElementById('btnRunAnalysis'); if (runBtn) runBtn.disabled = true;
+            setStatus(true, 'Starting...');
+            switchPage('progress');
+            const log = document.getElementById('progressLog');
+            log.innerHTML = '';
+            document.getElementById('progressStageLabel').textContent = 'Starting analysis...';
+
+            const stages = [
+                { msg: 'Collecting cached data for targets...', delay: 800 },
+                { msg: 'Analyzing cross-platform identity correlations...', delay: 1500 },
+                { msg: 'Running sentiment analysis on 2,847 text samples...', delay: 1200 },
+                { msg: 'Mapping social network graph...', delay: 1000 },
+                { msg: 'Extracting intelligence selectors...', delay: 900 },
+                { msg: 'Generating report...', delay: 1500 },
+            ];
+            let i = 0;
+            function nextStage() {
+                if (i >= stages.length) {
+                    appendLog('complete', '\u2713 Analysis complete');
+                    setStatus(false);
+                    const newReport = {
+                        query_id: 'q-demo-' + Date.now(),
+                        query: query,
+                        timestamp: new Date().toISOString(),
+                        metadata: { generated_utc: new Date().toISOString(), mode: 'Online', models: { text: 'claude-3.5-sonnet (demo)' } },
+                        entities: { locations: ['Demo Location'], aliases: ['demo_alias'], organizations: ['Demo Org'] },
+                        report: '## Demo Analysis Report\n\nThis is a simulated analysis report generated in **demo mode**.\n\nThe query was: `' + query + '`\n\nIn a live deployment, this would contain a full OSINT analysis with:\n- Executive summary\n- Platform-by-platform breakdown\n- Cross-platform correlation analysis\n- Intelligence selectors\n- Risk assessment\n\n---\n\n*This report was generated by the demo interface for demonstration purposes.*'
+                    };
+                    if (!state.currentSession.query_history) state.currentSession.query_history = [];
+                    state.currentSession.query_history.push(newReport);
+                    state.currentSession.query_count = state.currentSession.query_history.length;
+                    state.activeQueryId = newReport.query_id;
+                    refreshSessionList();
+                    viewReport(newReport);
+                    toast('Analysis complete (demo)', 'success');
+                    if (qi) qi.disabled = false;
+                    if (runBtn) runBtn.disabled = false;
+                    return;
+                }
+                const stage = stages[i];
+                document.getElementById('progressStageLabel').textContent = stage.msg;
+                appendLog('stage', '\u25b6 ' + stage.msg);
+                i++;
+                setTimeout(nextStage, stage.delay);
+            }
+            appendLog('info', 'Query: ' + query);
+            setTimeout(nextStage, 600);
+        }
+
+        function appendLog(cls, msg) {
+            const log = document.getElementById('progressLog'); const line = document.createElement('span'); line.className = 'log-line ' + cls; line.textContent = msg; line.style.display = 'block';
+            if (cls === 'stage') line.style.color = 'var(--accent)'; if (cls === 'error') line.style.color = 'var(--danger)'; if (cls === 'complete') line.style.color = 'var(--accent)';
+            log.appendChild(line); log.appendChild(document.createElement('br')); log.scrollTop = log.scrollHeight;
+        }
+
+        // ═══════════════ CONTACTS ═══════════════
+        function loadContacts() {
+            const s = state.currentSession;
+            if (!s) { state.contacts = []; return; }
+            if (s.session_id === 'sess-shadow-001') {
+                state.contacts = MOCK_CONTACTS.slice();
+            } else {
+                state.contacts = MOCK_CONTACTS.slice(0, 7);
+            }
+            document.getElementById('contactCount').textContent = state.contacts.length;
+            document.getElementById('statContacts').textContent = state.contacts.length;
+        }
+
+        function renderContacts(filter) {
+            filter = filter || state.contactsFilter; state.contactsFilter = filter.toLowerCase();
+            let contacts = state.contacts; if (state.contactsFilter) contacts = contacts.filter(c => c.username.toLowerCase().includes(state.contactsFilter) || c.platform.toLowerCase().includes(state.contactsFilter));
+            if (!contacts.length) { document.getElementById('contactsGrid').innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><i class="fa-solid fa-user-slash"></i><p>' + (filter ? 'No matches.' : 'No contacts yet.') + '</p></div>'; return; }
+            const s = state.currentSession;
+            document.getElementById('contactsGrid').innerHTML = contacts.map(c => {
+                const initials = c.username.slice(0, 2).toUpperCase(); const color = COLORS[hashStr(c.platform + c.username) % COLORS.length];
+                const itypes = (c.interaction_types || []).map(t => '<span class="tag platform" style="font-size:9px;">' + esc(t.replace('_', ' ')) + '</span>').join(' ');
+                const inSession = s && (s.platforms || {})[c.platform]?.includes(c.username);
+                const actionBtn = inSession
+                    ? '<button class="topbar-btn" style="flex:1;justify-content:center;opacity:0.5;cursor:default;" disabled><i class="fa-solid fa-check"></i> In Session</button>'
+                    : '<button class="topbar-btn" style="flex:1;justify-content:center;" onclick="toast(\'Demo mode - contacts are pre-loaded\',\'info\')"><i class="fa-solid fa-plus"></i> Add to Session</button>';
+                return '<div class="contact-card"><div class="contact-card-header"><div class="contact-avatar" style="background:' + color + '22;color:' + color + ';border:1.5px solid ' + color + '44;">' + initials + '</div><div><div class="ch-name">' + esc(c.username) + '</div><div class="ch-handle">' + esc(c.platform) + '</div></div></div><div class="contact-details"><div class="contact-detail"><i class="fa-solid fa-arrows-left-right"></i> Weight: ' + c.weight + '</div><div class="contact-detail"><i class="fa-solid fa-tag"></i> ' + itypes + '<span style="color:var(--fg-dim)"></span></div>' + (c.first_seen ? '<div class="contact-detail"><i class="fa-solid fa-calendar"></i> First: ' + fmtDate(c.first_seen) + '</div>' : '') + (c.last_seen ? '<div class="contact-detail"><i class="fa-solid fa-clock"></i> Last: ' + fmtDate(c.last_seen) + '</div>' : '') + '</div><div class="contact-card-footer">' + actionBtn + '<button class="topbar-btn" style="color:var(--danger);border-color:var(--border);" onclick="toast(\'Demo mode - read-only\',\'info\')"><i class="fa-solid fa-eye-slash"></i></button></div></div>';
+            }).join('');
+        }
+
+        function filterContacts(val) { renderContacts(val); }
+        function dismissContact() { toast('Demo mode - contacts are read-only', 'info'); }
+        function addContactToSession() { toast('Demo mode - contacts are pre-loaded', 'info'); }
+
+        // ═══════════════ CACHE ═══════════════
+        function loadCacheStatus() {
+            const s = state.currentSession;
+            if (!s) { state.cacheEntries = []; return; }
+            if (s.session_id === 'sess-shadow-001') {
+                state.cacheEntries = MOCK_CACHE.slice(0, 3);
+            } else {
+                state.cacheEntries = MOCK_CACHE.slice(3);
+            }
+            document.getElementById('cacheCount').textContent = state.cacheEntries.length;
+        }
+
+        function renderCache() {
+            const filter = state.cacheFilter; const filtered = filter === 'all' ? state.cacheEntries : state.cacheEntries.filter(c => filter === 'fresh' ? c.is_fresh : !c.is_fresh);
+            document.getElementById('cacheTotal').textContent = state.cacheEntries.length; document.getElementById('cacheHits').textContent = state.cacheEntries.filter(c => c.is_fresh).length; document.getElementById('cacheExpired').textContent = state.cacheEntries.filter(c => !c.is_fresh).length; document.getElementById('cacheCount').textContent = state.cacheEntries.length;
+            if (!filtered.length) { document.getElementById('cacheList').innerHTML = '<div class="empty-state"><i class="fa-solid fa-database"></i><p>' + (filter !== 'all' ? 'No matches.' : 'Cache is empty.') + '</p></div>'; return; }
+            document.getElementById('cacheList').innerHTML = filtered.map(c => '<div class="cache-item"><div class="ci-status ' + (c.is_fresh ? 'fresh' : 'stale') + '"></div><div class="ci-info"><div class="ci-key">' + esc(c.platform) + ' / ' + esc(c.username) + '</div><div class="ci-meta">' + c.post_count + ' posts &middot; ' + (c.media_found || 0) + ' media &middot; ' + (c.media_analyzed || 0) + ' analyzed &middot; ' + fmtAge(c.cached_at) + '</div></div><div class="ci-actions"><button class="ci-btn danger" onclick="toast(\'Demo mode - cache is read-only\',\'info\')"><i class="fa-solid fa-trash"></i></button></div></div>').join('');
+        }
+
+        function filterCache(filter) { state.cacheFilter = filter; renderCache(); }
+
+        // ═══════════════ MEDIA ═══════════════
+        function loadMedia() {
+            const s = state.currentSession;
+            if (!s) { state.mediaItems = []; return; }
+            state.mediaItems = MOCK_MEDIA.slice();
+            document.getElementById('mediaCount').textContent = state.mediaItems.length;
+        }
+
+        function renderMedia() {
+            const grid = document.getElementById('mediaGrid');
+            if (!state.mediaItems.length) { grid.innerHTML = '<div class="empty-state"><i class="fa-solid fa-images"></i><p>No media files.</p></div>'; return; }
+            grid.innerHTML = state.mediaItems.map(m => {
+                return '<div class="media-item-container"><div class="media-item" style="display:flex;align-items:center;justify-content:center;background:var(--bg-card);color:var(--fg-dim);font-size:32px;cursor:pointer;"><i class="fa-solid fa-file-image"></i></div><div class="media-analysis-overlay">' + esc(m.analysis || 'No analysis') + '</div></div>';
+            }).join('');
+        }
+
+        // ═══════════════ TIMELINE DATA ═══════════════
+        function loadTimeline() {
+            const s = state.currentSession;
+            if (!s) { state.timelineEvents = []; return; }
+            state.timelineEvents = MOCK_TIMELINE.slice();
+        }
+
+        // ═══════════════ GLOBAL SEARCH ═══════════════
+        function handleGlobalSearch(val) {
+            if (!val.trim()) return; const q = val.toLowerCase();
+            for (const s of state.sessions) { const queries = s.recent_queries || s.query_history || []; for (const qe of queries) { if (qe.query.toLowerCase().includes(q)) { loadSession(s.session_id); setTimeout(() => viewReportById(qe.query_id), 100); return; } } }
+            const con = state.contacts.find(c => c.username.toLowerCase().includes(q) || c.platform.toLowerCase().includes(q));
+            if (con) { switchPage('contacts'); document.getElementById('contactSearch').value = val; filterContacts(val); }
+        }
+
+        // ═══════════════ INIT ═══════════════
+        (function init() {
+            const saved = localStorage.getItem('osint-agent-theme'); applyTheme(saved || 'dark');
+            const qi = document.getElementById('queryInput'); if (qi) qi.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runAnalysis(); });
+            const tc = document.getElementById('targetChipsBar'); if (tc) tc.style.display = 'none';
+            const qb = document.getElementById('queryBar'); if (qb) qb.style.display = 'none';
+            refreshSessionList();
+            loadCacheStatus();
+            renderDashboard();
+            loadSession(MOCK_SESSIONS[0].session_id);
+        })();
+
+    </script>
+</body>
+
+</html>

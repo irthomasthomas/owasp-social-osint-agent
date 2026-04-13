@@ -9,7 +9,6 @@ Covers:
   missing platforms (exit 1), process_stdin exits 2 on analysis error.
 """
 
-import argparse
 import json
 import sys
 from io import StringIO
@@ -17,7 +16,7 @@ from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
-from socialosintagent.analyzer import FetchResult, SocialOSINTAgent
+from socialosintagent.analyzer import AgentConfig, FetchResult, SocialOSINTAgent
 from socialosintagent.image_processor import ImageProcessingResult, ProcessingStatus
 from socialosintagent.cache import CacheManager
 from socialosintagent.client_manager import ClientManager
@@ -26,6 +25,7 @@ from socialosintagent.llm import LLMAnalyzer
 from socialosintagent.utils import UserData
 
 # Fixtures
+
 
 @pytest.fixture
 def mock_dependencies(mocker):
@@ -45,15 +45,15 @@ def agent(mock_dependencies, monkeypatch):
     monkeypatch.setenv("IMAGE_ANALYSIS_MODEL", "test_vision_model")
     monkeypatch.setenv("ANALYSIS_MODEL", "test_text_model")
 
-    args = argparse.Namespace(
+    config = AgentConfig(
         offline=False,
         no_auto_save=True,
-        format="markdown",
+        output_format="markdown",
         unsafe_allow_external_media=False,
     )
     mock_cache, mock_llm, mock_client_manager = mock_dependencies
 
-    agent_instance = SocialOSINTAgent(args, mock_cache, mock_llm, mock_client_manager)
+    agent_instance = SocialOSINTAgent(config, mock_cache, mock_llm, mock_client_manager)
     return agent_instance
 
 
@@ -65,16 +65,18 @@ def offline_agent(mock_dependencies, monkeypatch):
     monkeypatch.setenv("IMAGE_ANALYSIS_MODEL", "test_vision_model")
     monkeypatch.setenv("ANALYSIS_MODEL", "test_text_model")
 
-    args = argparse.Namespace(
+    config = AgentConfig(
         offline=True,
         no_auto_save=True,
-        format="markdown",
+        output_format="markdown",
         unsafe_allow_external_media=False,
     )
     mock_cache, mock_llm, mock_client_manager = mock_dependencies
-    return SocialOSINTAgent(args, mock_cache, mock_llm, mock_client_manager)
+    return SocialOSINTAgent(config, mock_cache, mock_llm, mock_client_manager)
+
 
 # TEST
+
 
 def test_analyze_method_orchestration(agent, mocker):
     """Tests the main analyze() method's orchestration with the UserData model."""
@@ -113,21 +115,25 @@ def test_analyze_method_orchestration(agent, mocker):
         # Extract args passed to process_single_image to satisfy the autospec signature of analyze_func
         source_url = kwargs.get("source_url", "http://example.com/image.jpg")
         context = kwargs.get("context", "")
-        
+
         # Call the mocked analyze_func with required arguments
         res = analyze_func(file_path, source_url=source_url, context=context)
-        
+
         return ImageProcessingResult(
             url=source_url,
             status=ProcessingStatus.SUCCESS,
             analysis=res,
-            local_path=file_path
+            local_path=file_path,
         )
-    
+
     mock_processor.process_single_image.side_effect = side_effect
 
     agent.llm.analyze_image.return_value = "This is an image analysis."
-    agent.llm.run_analysis.return_value = "This is the final report."
+
+    # run_analysis returns a (report_str, entities_dict) tuple.
+    # Setting return_value to a plain string caused a ValueError at the
+    # `report, entities = self.llm.run_analysis(...)` unpack in analyzer.py.
+    agent.llm.run_analysis.return_value = ("This is the final report.", {})
 
     platforms_to_query = {"twitter": ["testuser"]}
     query = "analyze this user"
@@ -144,7 +150,9 @@ def test_analyze_method_orchestration(agent, mocker):
     assert result["report"].endswith("This is the final report.")
     assert not result["error"]
 
+
 # FetchResult unit tests
+
 
 class TestFetchResult:
     def test_initial_state(self):
@@ -195,7 +203,9 @@ class TestFetchResult:
         fr = FetchResult()
         assert fr.get_summary() == "no results"
 
+
 # analyze() error paths
+
 
 class TestAnalyzeErrorPaths:
     def test_all_fetches_fail_returns_error_dict(self, agent, mocker):
@@ -235,11 +245,13 @@ class TestAnalyzeErrorPaths:
         def fetcher(**kwargs):
             return mock_data
 
-        mocker.patch(
-            "socialosintagent.analyzer.FETCHERS", {"hackernews": fetcher}
-        )
+        mocker.patch("socialosintagent.analyzer.FETCHERS", {"hackernews": fetcher})
         offline_agent.client_manager.get_platform_client.return_value = None
-        offline_agent.llm.run_analysis.return_value = "Offline report content."
+
+        # run_analysis returns a (report_str, entities_dict) tuple.
+        # The plain string "Offline report content." would cause a ValueError
+        # at the `report, entities = self.llm.run_analysis(...)` unpack.
+        offline_agent.llm.run_analysis.return_value = ("Offline report content.", {})
 
         result = offline_agent.analyze({"hackernews": ["coder"]}, "summarize")
 
@@ -250,7 +262,9 @@ class TestAnalyzeErrorPaths:
         assert not result["error"]
         assert "Offline report content." in result["report"]
 
+
 # process_stdin validation
+
 
 class TestProcessStdin:
     def _run_stdin(self, agent, json_input):
