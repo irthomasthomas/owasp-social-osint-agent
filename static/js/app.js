@@ -141,6 +141,7 @@ function buildGroupEl(g) {
         t.dataset.panel = pid;
         t.innerHTML = `<i class="fa-solid ${PANEL_ICONS[pid] || 'fa-cube'}"></i><span class="pg-tab-label">${PANEL_TITLES[pid] || pid}</span>`;
         t.addEventListener('mousedown', e => startTabDrag(e, g.id, pid));
+        t.addEventListener('touchstart', e => startTabDrag(e, g.id, pid), { passive: false });
         tabBar.appendChild(t);
     });
     hdr.appendChild(tabBar);
@@ -312,6 +313,7 @@ function doMerge(srcEl, tgtEl) {
         tab.dataset.panel = pid;
         tab.innerHTML = `<i class="fa-solid ${PANEL_ICONS[pid] || 'fa-cube'}"></i><span class="pg-tab-label">${PANEL_TITLES[pid] || pid}</span>`;
         tab.addEventListener('mousedown', e => startTabDrag(e, tgtId, pid));
+        tab.addEventListener('touchstart', e => startTabDrag(e, tgtId, pid), { passive: false });
         tgtTabBar.appendChild(tab);
         populatePaneBody(tgtEl, pid);
     });
@@ -441,17 +443,20 @@ function initGroupResize(el) {
 
 // --- Tab Drag (detach from multi-tab group) ---
 function startTabDrag(e, groupId, panelId) {
-    if (e.button !== 0) return;
+    if (e.button !== 0 && !e.touches) return;
     const el = document.querySelector(`.panel-group[data-group-id="${groupId}"]`);
     if (!el || el.querySelectorAll('.pg-tab').length <= 1) return;
     const isPinned = el.dataset.pinned === 'true';
     if (isPinned) { switchTab(groupId, panelId); return; }
     e.preventDefault();
-    const sx = e.clientX, sy = e.clientY;
+    const sx = e.clientX || e.touches[0].clientX;
+    const sy = e.clientY || e.touches[0].clientY;
     let detached = false, lx = sx, ly = sy, ghost = null;
 
     function onM(ev) {
-        lx = ev.clientX; ly = ev.clientY;
+        const cx = ev.clientX ?? ev.touches[0].clientX;
+        const cy = ev.clientY ?? ev.touches[0].clientY;
+        lx = cx; ly = cy;
         if (!detached && (Math.abs(lx - sx) > 8 || Math.abs(ly - sy) > 8)) {
             detached = true;
             ghost = document.createElement('div');
@@ -478,6 +483,7 @@ function startTabDrag(e, groupId, panelId) {
     }
     function onU() {
         document.removeEventListener('mousemove', onM); document.removeEventListener('mouseup', onU);
+        document.removeEventListener('touchmove', onTM); document.removeEventListener('touchend', onU);
         if (ghost) ghost.remove();
         hideMergeTargets();
         if (!detached) { switchTab(groupId, panelId); return; }
@@ -493,6 +499,7 @@ function startTabDrag(e, groupId, panelId) {
             const nt = document.createElement('div'); nt.className = 'pg-tab'; nt.dataset.panel = panelId;
             nt.innerHTML = `<i class="fa-solid ${PANEL_ICONS[panelId] || 'fa-cube'}"></i><span class="pg-tab-label">${PANEL_TITLES[panelId] || panelId}</span>`;
             nt.addEventListener('mousedown', e2 => startTabDrag(e2, mergeTarget.dataset.groupId, panelId));
+            nt.addEventListener('touchstart', e2 => startTabDrag(e2, mergeTarget.dataset.groupId, panelId), { passive: false });
             mergeTarget.querySelector('.pg-tabs').appendChild(nt);
             tab.remove();
             populatePaneBody(mergeTarget, panelId);
@@ -518,7 +525,9 @@ function startTabDrag(e, groupId, panelId) {
         if (el.querySelectorAll('.pg-tab').length === 0) el.remove();
         savePanelLayout();
     }
+    function onTM(ev) { ev.preventDefault(); onM(ev); }
     document.addEventListener('mousemove', onM); document.addEventListener('mouseup', onU);
+    document.addEventListener('touchmove', onTM, { passive: false }); document.addEventListener('touchend', onU);
 }
 
 // --- Content ---
@@ -564,6 +573,7 @@ function initPanels() {
 
 // ═══════════════ NAVIGATION ═══════════════
 function switchPage(page) {
+    closeMobileSidebar();
     state.activePage = page;
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const el = document.getElementById('page-' + page);
@@ -627,7 +637,7 @@ async function loadSession(id) {
 
 async function deleteSession(id) {
     if (!confirm('Delete this session?')) return;
-    try { await apiDel(`/sessions/${id}`); if (state.currentSession?.session_id === id) { state.currentSession = null; switchPage('dashboard'); } await refreshSessionList(); toast('Session deleted', 'info'); }
+    try { await apiDel(`/sessions/${id}`); if (state.currentSession?.session_id === id) { state.currentSession = null; switchPage('dashboard'); renderTargetChips(); } await refreshSessionList(); toast('Session deleted', 'info'); }
     catch (e) { toast('Delete failed: ' + e.message, 'error'); }
 }
 
@@ -665,9 +675,9 @@ document.getElementById('btnManageTargets').addEventListener('click', openTarget
 function getTargetCacheStatus(platform, username) { const entry = state.cacheEntries.find(c => c.platform === platform && c.username === username); if (!entry) return 'absent'; return entry.is_fresh ? 'fresh' : 'stale'; }
 
 function renderTargetChips() {
-    const s = state.currentSession; const bar = document.getElementById('targetChipsBar'); const container = document.getElementById('targetChips'); const queryBar = document.getElementById('queryBar');
-    if (!s) { if (bar) bar.style.display = 'none'; if (queryBar) queryBar.style.display = 'none'; return; }
-    if (bar) bar.style.display = ''; if (queryBar) queryBar.style.display = '';
+    const s = state.currentSession; const bar = document.getElementById('targetChipsBar'); const container = document.getElementById('targetChips'); const queryBar = document.getElementById('queryBar'); const btnTargets = document.getElementById('btnManageTargets');
+    if (!s) { if (bar) bar.style.display = 'none'; if (queryBar) queryBar.style.display = 'none'; if (btnTargets) btnTargets.style.display = 'none'; return; }
+    if (bar) bar.style.display = ''; if (queryBar) queryBar.style.display = ''; if (btnTargets) btnTargets.style.display = '';
     const targets = []; for (const [platform, users] of Object.entries(s.platforms || {})) for (const username of users) targets.push({ platform, username, status: getTargetCacheStatus(platform, username) });
     if (!container) return;
     if (!targets.length) { container.innerHTML = '<span style="font-size:11px;color:var(--fg-dim);">No targets</span>'; return; }
@@ -845,15 +855,24 @@ function drawNetworkGraph() {
 
     const svg = d3.select(container).append('svg').attr('width', W).attr('height', H);
     const zoomG = svg.append('g');
+    const isMobile = window.innerWidth <= 768;
     const zoomBehavior = d3.zoom().scaleExtent([0.3, 5]).on('zoom', ev => zoomG.attr('transform', ev.transform));
-    svg.call(zoomBehavior);
+    if (isMobile) {
+        zoomBehavior.filter(ev => {
+            if (ev.type === 'wheel') return true;
+            return false;
+        });
+        svg.call(zoomBehavior).on('touchstart.zoom', null).on('touchmove.zoom', null).on('touchend.zoom', null);
+    } else {
+        svg.call(zoomBehavior);
+    }
     svg.on('dblclick.zoom', null);
     graphZoom = { behavior: zoomBehavior, svg, zoomG };
 
     const sim = d3.forceSimulation(nodes).force('link', d3.forceLink(validLinks).id(d => d.id).distance(50).strength(0.5)).force('charge', d3.forceManyBody().strength(-80)).force('center', d3.forceCenter(W / 2, H / 2)).force('collision', d3.forceCollide(14));
     const link = zoomG.append('g').selectAll('line').data(validLinks).join('line').attr('class', 'graph-link').style('stroke-width', d => 0.5 + (d.weight / maxW) * 1.8);
     const node = zoomG.append('g').selectAll('g').data(nodes).join('g').attr('class', d => d.type === 'source' ? 'node-source' : 'node-contact')
-        .call(d3.drag().on('start', (ev, d) => { const t = d3.zoomTransform(svg.node()); if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('drag', (ev, d) => { const t = d3.zoomTransform(svg.node()); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+        .call(isMobile ? () => {} : d3.drag().on('start', (ev, d) => { const t = d3.zoomTransform(svg.node()); if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('drag', (ev, d) => { const t = d3.zoomTransform(svg.node()); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
     node.append('circle').attr('r', d => d.type === 'source' ? 9 : 5 + (d.weight || 1) / maxW * 4).style('fill', d => d.type === 'source' ? accentColor : bgRaised).style('stroke', d => d.type === 'source' ? bgSurface : borderMedium).style('stroke-width', d => d.type === 'source' ? '2.5px' : '1.5px');
     node.append('text').attr('class', 'node-label').attr('dy', d => -(d.type === 'source' ? 12 : 10)).attr('text-anchor', 'middle').style('fill', textSec).text(d => d.label.length > 11 ? d.label.slice(0, 10) + '\u2026' : d.label);
     sim.on('tick', () => { link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y); node.attr('transform', d => `translate(${d.x},${d.y})`); });
@@ -886,6 +905,84 @@ function renderDashboard() {
 
 // ═══════════════ ANALYSIS ═══════════════
 
+const PIPELINE_STAGES = ['fetch', 'vision', 'synthesis'];
+let _heartbeatInterval = null;
+let _lastEventTime = 0;
+let _elapsedInterval = null;
+let _analysisStartTime = 0;
+
+function setPipelineStep(stageName) {
+    const idx = PIPELINE_STAGES.indexOf(stageName);
+    if (idx < 0) return;
+    document.querySelectorAll('.pipeline-step').forEach((el, i) => {
+        el.classList.remove('active', 'complete');
+        if (i < idx) el.classList.add('complete');
+        else if (i === idx) el.classList.add('active');
+    });
+    document.querySelectorAll('.pipeline-connector').forEach((el, i) => {
+        el.classList.toggle('complete', i < idx);
+    });
+}
+
+function setPipelineComplete() {
+    document.querySelectorAll('.pipeline-step').forEach(el => {
+        el.classList.remove('active');
+        el.classList.add('complete');
+    });
+    document.querySelectorAll('.pipeline-connector').forEach(el => {
+        el.classList.add('complete');
+    });
+}
+
+function resetPipeline() {
+    document.querySelectorAll('.pipeline-step').forEach(el => {
+        el.classList.remove('active', 'complete');
+    });
+    document.querySelectorAll('.pipeline-connector').forEach(el => {
+        el.classList.remove('complete');
+    });
+}
+
+function startElapsedTimer() {
+    _analysisStartTime = Date.now();
+    const el = document.getElementById('pipelineElapsed');
+    if (!el) return;
+    el.textContent = '0s';
+    _elapsedInterval = setInterval(() => {
+        const s = Math.round((Date.now() - _analysisStartTime) / 1000);
+        const m = Math.floor(s / 60);
+        el.textContent = m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+    }, 1000);
+}
+
+function stopElapsedTimer() {
+    if (_elapsedInterval) { clearInterval(_elapsedInterval); _elapsedInterval = null; }
+}
+
+function showHeartbeat() {
+    const el = document.getElementById('pipelineHeartbeat');
+    if (el) el.classList.add('visible');
+}
+
+function hideHeartbeat() {
+    const el = document.getElementById('pipelineHeartbeat');
+    if (el) el.classList.remove('visible');
+    _lastEventTime = Date.now();
+}
+
+function startHeartbeatMonitor() {
+    _lastEventTime = Date.now();
+    hideHeartbeat();
+    _heartbeatInterval = setInterval(() => {
+        if (Date.now() - _lastEventTime > 5000) showHeartbeat();
+    }, 2000);
+}
+
+function stopHeartbeatMonitor() {
+    if (_heartbeatInterval) { clearInterval(_heartbeatInterval); _heartbeatInterval = null; }
+    hideHeartbeat();
+}
+
 function lockQueryBar() {
     const qi = document.getElementById('queryInput');
     const runBtn = document.getElementById('btnRunAnalysis');
@@ -907,11 +1004,17 @@ function runAnalysis() {
     if (!query) { toast('Enter an analysis query', 'error'); qi && qi.focus(); return; }
     if (qi) qi.value = '';
     lockQueryBar();
-    setStatus(true, 'Starting...'); switchPage('progress'); document.getElementById('progressLog').innerHTML = ''; document.getElementById('progressStageLabel').textContent = 'Starting analysis...';
+    setStatus(true, 'Starting...');
+    switchPage('progress');
+    document.getElementById('progressLog').innerHTML = '';
+    document.getElementById('progressStageLabel').textContent = 'Starting analysis...';
+    resetPipeline();
+    startElapsedTimer();
+    startHeartbeatMonitor();
     apiPut(`/sessions/${s.session_id}/targets`, { platforms: s.platforms, fetch_options: s.fetch_options })
         .then(() => apiPost(`/sessions/${s.session_id}/analyse`, { query, force_refresh: false }))
         .then(job => { state.runningJobId = job.job_id; startProgressStream(job.job_id, query); })
-        .catch(e => { if (e.message.includes('already has a running')) toast('Analysis already running', 'info'); else toast('Failed: ' + e.message, 'error'); setStatus(false); unlockQueryBar(); switchPage('dashboard'); });
+        .catch(e => { if (e.message.includes('already has a running')) toast('Analysis already running', 'info'); else toast('Failed: ' + e.message, 'error'); setStatus(false); unlockQueryBar(); switchPage('dashboard'); stopElapsedTimer(); stopHeartbeatMonitor(); });
 }
 
 function startProgressStream(jobId, query) {
@@ -922,10 +1025,16 @@ function startProgressStream(jobId, query) {
 }
 
 function handleJobEvent(type, data) {
-    if (type === 'stage') { document.getElementById('progressStageLabel').textContent = data.message || ''; appendLog('stage', `\u25b6 ${data.message}`); }
+    _lastEventTime = Date.now();
+    hideHeartbeat();
+    if (type === 'stage') {
+        document.getElementById('progressStageLabel').textContent = data.message || '';
+        setPipelineStep(data.stage || 'fetch');
+        appendLog('stage', `\u25b6 ${data.message}`);
+    }
     else if (type === 'log' || type === 'status') appendLog('info', data.message);
-    else if (type === 'complete') { appendLog('complete', '\u2713 Analysis complete'); finishAnalysis(); }
-    else if (type === 'error') { appendLog('error', `\u2717 ${data.message}`); state.runningJobId = null; unlockQueryBar(); setStatus(false); toast('Error: ' + data.message, 'error'); }
+    else if (type === 'complete') { appendLog('complete', '\u2713 Analysis complete'); setPipelineComplete(); stopHeartbeatMonitor(); finishAnalysis(); }
+    else if (type === 'error') { appendLog('error', `\u2717 ${data.message}`); state.runningJobId = null; unlockQueryBar(); setStatus(false); stopElapsedTimer(); stopHeartbeatMonitor(); toast('Error: ' + data.message, 'error'); }
 }
 
 function appendLog(cls, msg) {
@@ -935,7 +1044,7 @@ function appendLog(cls, msg) {
 }
 
 async function finishAnalysis() {
-    if (state.sseSource) { state.sseSource.close(); state.sseSource = null; } state.runningJobId = null; unlockQueryBar(); setStatus(false);
+    if (state.sseSource) { state.sseSource.close(); state.sseSource = null; } state.runningJobId = null; unlockQueryBar(); setStatus(false); stopElapsedTimer(); stopHeartbeatMonitor();
     try {
         const session = await apiGet(`/sessions/${state.currentSession.session_id}`); state.currentSession = session;
         await refreshSessionList(); await loadCacheStatus(); await loadContacts(); await loadMedia(); await loadTimeline(); renderTargetChips();
@@ -945,7 +1054,7 @@ async function finishAnalysis() {
 }
 
 async function pollJob(jobId) {
-    const poll = async () => { try { const job = await apiGet(`/jobs/${jobId}`); if (job.status === 'complete') { finishAnalysis(); return; } if (job.status === 'error') { state.runningJobId = null; unlockQueryBar(); setStatus(false); toast('Failed: ' + job.error, 'error'); return; } if (job.progress?.message) document.getElementById('progressStageLabel').textContent = job.progress.message; setTimeout(poll, 2000); } catch { setTimeout(poll, 3000); } }; poll();
+    const poll = async () => { try { const job = await apiGet(`/jobs/${jobId}`); if (job.status === 'complete') { finishAnalysis(); return; } if (job.status === 'error') { state.runningJobId = null; unlockQueryBar(); setStatus(false); stopElapsedTimer(); stopHeartbeatMonitor(); toast('Failed: ' + job.error, 'error'); return; } if (job.progress?.message) document.getElementById('progressStageLabel').textContent = job.progress.message; setTimeout(poll, 2000); } catch { setTimeout(poll, 3000); } }; poll();
 }
 
 // ═══════════════ CONTACTS (Full Page) ═══════════════
@@ -979,6 +1088,7 @@ function updateContactCardSize(val) {
 
 function restoreContactCardSize() {
     try {
+        if (window.innerWidth <= 768) return;
         const saved = localStorage.getItem('osint_contact_card_size');
         if (saved) {
             const slider = document.getElementById('contactCardSize');
@@ -1034,6 +1144,44 @@ function handleGlobalSearch(val) {
 document.querySelectorAll('.modal-overlay').forEach(m => { m.addEventListener('click', e => { if (e.target === m) m.classList.remove('show'); }); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show')); });
 
+// ═══════════════ MOBILE SIDEBAR ═══════════════
+function toggleMobileSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar.classList.contains('open')) {
+        closeMobileSidebar();
+    } else {
+        sidebar.classList.add('open');
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeMobileSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    if (sidebar) sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+// Close sidebar on resize to desktop
+window.addEventListener('resize', () => {
+    if (window.innerWidth > 768) closeMobileSidebar();
+});
+
+// Bind hamburger button directly (script is at end of body, DOM is ready)
+(function bindHamburger() {
+    const btn = document.getElementById('hamburgerBtn');
+    if (btn) {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleMobileSidebar();
+        });
+    }
+})();
+
 // ═══════════════ INIT ═══════════════
 (async function init() {
     const saved = localStorage.getItem('osint-agent-theme'); applyTheme(saved || 'dark');
@@ -1041,6 +1189,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') document.que
     const qi = document.getElementById('queryInput'); if (qi) qi.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runAnalysis(); });
     const tc = document.getElementById('targetChipsBar'); if (tc) tc.style.display = 'none';
     const qb = document.getElementById('queryBar'); if (qb) qb.style.display = 'none';
+    const bt = document.getElementById('btnManageTargets'); if (bt) bt.style.display = 'none';
     await refreshSessionList();
     await loadCacheStatus();
     renderDashboard();

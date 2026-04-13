@@ -42,7 +42,7 @@ services:
     env_file: .env
     working_dir: /app
     ports:
-      - "127.0.0.1:8000:8000"       # Localhost only. Use SSH tunnel for remote access.
+      - "0.0.0.0:8000:8000"         # Accessible from LAN. Set OSINT_WEB_USER/PASSWORD in .env.
     restart: unless-stopped
     healthcheck:
       test: [
