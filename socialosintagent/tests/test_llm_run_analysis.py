@@ -29,6 +29,7 @@ def online_analyzer(monkeypatch):
     monkeypatch.setenv("ANALYSIS_MODEL", "test_model")
     monkeypatch.setenv("IMAGE_ANALYSIS_MODEL", "test_vision_model")
     from socialosintagent.llm import LLMAnalyzer
+
     return LLMAnalyzer(is_offline=False)
 
 
@@ -110,7 +111,9 @@ def _stub_client(analyzer, response_text="Mock LLM response."):
 
 
 class TestRunAnalysisPromptConstruction:
-    def test_timestamp_placeholder_is_substituted(self, online_analyzer, clean_platforms_data):
+    def test_timestamp_placeholder_is_substituted(
+        self, online_analyzer, clean_platforms_data
+    ):
         """The literal string '{current_timestamp}' must not appear in the sent system prompt."""
         captured = _stub_client(online_analyzer)
         online_analyzer.run_analysis(clean_platforms_data, "What are their interests?")
@@ -135,7 +138,9 @@ class TestRunAnalysisPromptConstruction:
         assert "<user_query>" in user_content
         assert "</user_query>" in user_content
 
-    def test_text_evidence_wrapped_in_xml_tag(self, online_analyzer, clean_platforms_data):
+    def test_text_evidence_wrapped_in_xml_tag(
+        self, online_analyzer, clean_platforms_data
+    ):
         """Collected text data must be wrapped in <evidence>...</evidence>.
 
         The tag was renamed from <text_evidence> to <evidence> when the
@@ -163,8 +168,10 @@ class TestRunAnalysisPromptConstruction:
     ):
         """When warnings are accumulated the report must include a Security Anomalies section."""
         _stub_client(online_analyzer, response_text="Normal analysis output.")
-        # run_analysis returns a (report_str, entities_dict) tuple — unpack correctly.
-        report, _entities = online_analyzer.run_analysis(injected_platforms_data, "summarise")
+        # run_analysis returns a (report_str, entities_dict, usage_dict) tuple — unpack correctly.
+        report, _entities, _usage = online_analyzer.run_analysis(
+            injected_platforms_data, "summarise"
+        )
         assert "Security Anomalies" in report
 
     def test_warnings_reset_between_calls(
