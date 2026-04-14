@@ -10,7 +10,7 @@ const state = {
     sessions: [], currentSession: null, activeQueryId: null, runningJobId: null,
     sseSource: null, cacheEntries: [], contacts: [], contactsDismissed: [],
     contactsFilter: '', mediaItems: [], cacheFilter: 'all', activePage: 'dashboard',
-    mtTargets: [], theme: 'dark', timelineEvents: [], panelFilter: '',
+    mtTargets: [], newSessionTargets: [], theme: 'dark', timelineEvents: [], panelFilter: '',
 };
 
 let panelZCounter = 10;
@@ -579,10 +579,24 @@ function switchPage(page) {
     const el = document.getElementById('page-' + page);
     if (el) el.classList.add('active');
     document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+    document.querySelectorAll('.nav-child-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+    if (page === 'contacts' || page === 'media') {
+        const parent = document.getElementById('reportDataNav');
+        const children = document.getElementById('reportNavChildren');
+        if (parent) parent.classList.add('open');
+        if (children) children.classList.add('open');
+    }
     if (page === 'contacts') renderContacts();
     if (page === 'cache') renderCache();
     if (page === 'dashboard') renderDashboard();
     if (page === 'media') renderMedia();
+}
+
+function toggleReportNav() {
+    const parent = document.getElementById('reportDataNav');
+    const children = document.getElementById('reportNavChildren');
+    parent.classList.toggle('open');
+    children.classList.toggle('open');
 }
 
 // ═══════════════ SESSIONS ═══════════════
@@ -641,15 +655,55 @@ async function deleteSession(id) {
     catch (e) { toast('Delete failed: ' + e.message, 'error'); }
 }
 
+function openNewSessionModal() {
+    state.newSessionTargets = [];
+    nsRenderTargets();
+    document.getElementById('newSessionName').value = '';
+    openModal('modalNewSession');
+}
+
+function nsAddTarget() {
+    const p = document.getElementById('nsPlatform').value;
+    const u = document.getElementById('nsUsername').value.trim().replace(/^@/, '');
+    if (!u) return;
+    if (state.newSessionTargets.find(t => t.platform === p && t.username === u)) return;
+    state.newSessionTargets.push({ platform: p, username: u });
+    document.getElementById('nsUsername').value = '';
+    nsRenderTargets();
+}
+
+function nsRemoveTarget(i) { state.newSessionTargets.splice(i, 1); nsRenderTargets(); }
+
+function nsRenderTargets() {
+    const list = document.getElementById('newSessionTargetsList');
+    if (!state.newSessionTargets.length) {
+        list.innerHTML = '<div style="font-size:11px;color:var(--fg-dim);padding:4px 0">Add at least one target below.</div>';
+        return;
+    }
+    list.innerHTML = state.newSessionTargets.map((t, i) =>
+        `<div class="target-row"><span class="plat-badge">${esc(t.platform)}</span><span class="target-row-name">${esc(t.username)}</span><button class="target-row-remove" onclick="nsRemoveTarget(${i})">&times;</button></div>`
+    ).join('');
+}
+
 function createSession() {
     const name = document.getElementById('newSessionName').value.trim();
-    const platform = document.getElementById('newSessionPlatform').value;
-    const handle = document.getElementById('newSessionHandle').value.trim().replace(/^@/, '');
     const count = parseInt(document.getElementById('newSessionCount').value) || 50;
     if (!name) { toast('Session name required', 'error'); return; }
-    if (!handle) { toast('Target handle required', 'error'); return; }
-    apiPost('/sessions', { name, platforms: { [platform]: [handle] }, fetch_options: { default_count: count, targets: {} } })
-        .then(s => { closeModal('modalNewSession'); document.getElementById('newSessionName').value = ''; document.getElementById('newSessionHandle').value = ''; refreshSessionList().then(() => loadSession(s.session_id)); toast('Session created: ' + name); })
+    if (!state.newSessionTargets.length) { toast('Add at least one target', 'error'); return; }
+    const platforms = {};
+    state.newSessionTargets.forEach(({ platform, username }) => {
+        if (!platforms[platform]) platforms[platform] = [];
+        platforms[platform].push(username);
+    });
+    apiPost('/sessions', { name, platforms, fetch_options: { default_count: count, targets: {} } })
+        .then(s => {
+            closeModal('modalNewSession');
+            document.getElementById('newSessionName').value = '';
+            state.newSessionTargets = [];
+            nsRenderTargets();
+            refreshSessionList().then(() => loadSession(s.session_id));
+            toast('Session created: ' + name);
+        })
         .catch(e => toast('Failed: ' + e.message, 'error'));
 }
 
@@ -707,6 +761,31 @@ function viewReport(entry) {
     let metaHtml = `<div class="report-meta-item"><i class="fa-solid fa-clock"></i> <strong>${esc(generated)}</strong></div>`;
     if (mode) metaHtml += `<div class="report-meta-item"><i class="fa-solid fa-wifi"></i> Mode: <strong>${esc(mode)}</strong></div>`;
     if (model) metaHtml += `<div class="report-meta-item"><i class="fa-solid fa-microchip"></i> <strong>${esc(model)}</strong></div>`;
+    const usage = meta.llm_usage;
+    if (usage) {
+        const fmtTok = n => n > 0 ? n.toLocaleString() : '—';
+        const txt = usage.text || {};
+        const vis = usage.vision || {};
+        const totalPrompt = (txt.prompt_tokens || 0) + (vis.prompt_tokens || 0);
+        const totalComp = (txt.completion_tokens || 0) + (vis.completion_tokens || 0);
+        const totalAll = (txt.total_tokens || 0) + (vis.total_tokens || 0);
+        if (totalAll > 0) {
+            metaHtml += `<div class="report-meta-item"><i class="fa-solid fa-coins"></i> Tokens: <strong>${fmtTok(totalAll)}</strong> total</div>`;
+            if (vis.total_tokens > 0) {
+                metaHtml += `<div class="report-meta-item"><i class="fa-solid fa-eye"></i> Vision: <strong>${fmtTok(vis.total_tokens)}</strong></div>`;
+            }
+            if (txt.total_tokens > 0) {
+                metaHtml += `<div class="report-meta-item"><i class="fa-solid fa-pen"></i> Text: <strong>${fmtTok(txt.prompt_tokens)}</strong> prompt / <strong>${fmtTok(txt.completion_tokens)}</strong> completion</div>`;
+            }
+        }
+    }
+    if (meta.generation_time_seconds != null) {
+        const secs = meta.generation_time_seconds;
+        const m = Math.floor(secs / 60);
+        const s = Math.round(secs % 60);
+        const durStr = m > 0 ? `${m}m ${s}s` : `${s}s`;
+        metaHtml += `<div class="report-meta-item"><i class="fa-solid fa-stopwatch"></i> Generated in <strong>${durStr}</strong></div>`;
+    }
     document.getElementById('reportMetaRow').innerHTML = metaHtml;
     requestAnimationFrame(() => {
         initPanels();
@@ -731,7 +810,9 @@ function copyReport() { const s = state.currentSession; if (!s) return; const en
 function downloadReport() {
     const s = state.currentSession; if (!s) return; const entry = s.query_history?.find(e => e.query_id === state.activeQueryId); if (!entry) { toast('No report', 'info'); return; }
     const meta = entry.metadata || {};
-    const header = `# ${entry.query}\n\n**Generated:** ${meta.generated_utc || entry.timestamp || ''}\n**Session:** ${s.name}\n**Mode:** ${meta.mode || 'N/A'}\n**Model:** ${meta.models?.text || 'N/A'}\n\n---\n\n`;
+    const usageLine = meta.llm_usage ? `\n**Tokens:** ${((meta.llm_usage.text?.total_tokens || 0) + (meta.llm_usage.vision?.total_tokens || 0)).toLocaleString()} total\n` : '';
+    const durLine = meta.generation_time_seconds != null ? (() => { const m = Math.floor(meta.generation_time_seconds / 60); const s = Math.round(meta.generation_time_seconds % 60); return `\n**Generation Time:** ${m > 0 ? m + 'm ' : ''}${s}s\n`; })() : '';
+    const header = `# ${entry.query}\n\n**Generated:** ${meta.generated_utc || entry.timestamp || ''}\n**Session:** ${s.name}\n**Mode:** ${meta.mode || 'N/A'}\n**Model:** ${meta.models?.text || 'N/A'}\n${usageLine}${durLine}\n---\n\n`;
     const blob = new Blob([header + (entry.report || '')], { type: 'text/markdown' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); const ts = (entry.timestamp || Date.now()).replace(/[:.]/g, '-').slice(0, 19); a.download = `${s.name.replace(/[^a-zA-Z0-9]/g, '_')}_${ts}.md`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href); toast('Downloaded', 'success');
@@ -1033,7 +1114,20 @@ function handleJobEvent(type, data) {
         appendLog('stage', `\u25b6 ${data.message}`);
     }
     else if (type === 'log' || type === 'status') appendLog('info', data.message);
-    else if (type === 'complete') { appendLog('complete', '\u2713 Analysis complete'); setPipelineComplete(); stopHeartbeatMonitor(); finishAnalysis(); }
+    else if (type === 'complete') {
+        appendLog('complete', '\u2713 Analysis complete');
+        if (data.llm_usage) {
+            const u = data.llm_usage;
+            const total = ((u.text?.total_tokens || 0) + (u.vision?.total_tokens || 0));
+            if (total > 0) {
+                let parts = [`Tokens: ${total.toLocaleString()} total`];
+                if (u.vision?.total_tokens > 0) parts.push(`vision: ${u.vision.total_tokens.toLocaleString()}`);
+                if (u.text?.total_tokens > 0) parts.push(`text: ${u.text.total_tokens.toLocaleString()}`);
+                appendLog('info', parts.join(' \u2022 '));
+            }
+        }
+        setPipelineComplete(); stopHeartbeatMonitor(); finishAnalysis();
+    }
     else if (type === 'error') { appendLog('error', `\u2717 ${data.message}`); state.runningJobId = null; unlockQueryBar(); setStatus(false); stopElapsedTimer(); stopHeartbeatMonitor(); toast('Error: ' + data.message, 'error'); }
 }
 

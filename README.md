@@ -91,7 +91,12 @@ Then open `http://localhost:8000` in your browser. The image is built automatica
 
 ### Web UI features at a glance
 
-**Sessions panel (left sidebar)**
+**Navigation sidebar (left)**
+- **Dashboard** — overview with session stats, recent reports, and quick actions
+- **Cache** — view and manage all cached platform data with freshness indicators
+- **Report Data** (collapsible) — expand to access **Contacts** and **Media**, which are per-report data views
+
+**Sessions panel (left sidebar, below navigation)**
 - Create named investigation sessions; each has its own target list, query history, and report archive
 - Sessions persist across server restarts — pick up where you left off
 - Rename sessions inline by clicking the title
@@ -114,8 +119,9 @@ Then open `http://localhost:8000` in your browser. The image is built automatica
 
 **Report panel (centre)**
 - Reports render as styled Markdown with clickable image links
+- Report header shows generation time, token usage (text/vision breakdown), model, and mode
 - Switch between the **Report** tab and the **Timeline** tab at any time
-- **Download MD** saves the current report as a Markdown file
+- **Download MD** saves the current report as a Markdown file (includes generation time and token stats in the header)
 - The full-session **Export Full Report** button produces a single consolidated Markdown document covering every query in the session, all extracted entities, and the top network contacts
 
 **Query history sidebar**
@@ -141,10 +147,10 @@ Then open `http://localhost:8000` in your browser. The image is built automatica
 - Shows thumbnails of all images downloaded for the current session's targets
 - Hover over a thumbnail to reveal the LLM vision analysis for that image
 
-**Cache manager**
-- Opened from the top bar **Cache** button
-- Shows every cached target with post count and freshness status
-- Select individual targets to purge, or wipe everything (cache + media + outputs) in one click
+**Navigation sidebar**
+- **Dashboard** and **Cache** are top-level navigation items
+- **Contacts** and **Media** are nested under a collapsible **Report Data** section — click to expand/collapse, auto-expands when a child page is selected
+- **Cache** page shows every cached target with post count and freshness status, with filter controls and bulk purge
 
 ### Remote access
 
@@ -415,7 +421,7 @@ For terminal-based use, the `agent` service runs the original interactive CLI. I
 # Interactive session (fetches live data)
 docker compose --profile cli run --rm -it agent
 
-# Offline mode — uses only cached data, no network requests
+# Offline mode — uses only cached data, no network requests other than LLM
 docker compose --profile cli run --rm -it agent --offline
 
 # Override log level inside the container
@@ -426,6 +432,8 @@ docker compose --profile cli run --rm -it agent --unsafe-allow-external-media
 ```
 
 Offline mode is useful for reviewing previously fetched data without making any API calls. The agent stores its data in `./data-agent/`, completely separate from the web server's `./data-web/`.
+
+After each analysis, the CLI displays a **Report Stats** panel showing generation time, LLM token usage (text and vision breakdown), and fetch source counts.
 
 ### Docker CLI (Programmatic / Stdin)
 
@@ -535,6 +543,7 @@ Within the analysis session, you can use these commands instead of an analysis q
 *   **Post-Bound Evidence:** Text and image analyses are kept together as atomic evidence units in the LLM prompt. A post saying "going on holiday" paired with a beach photo conveys different intelligence than the same text paired with a military facility — splitting text and vision into separate blocks would lose that binding.
 *   **Externalized Prompts:** All prompts used to guide the LLM are stored in the `socialosintagent/prompts/` directory, allowing for easy customization without changing code.
 *   **Accurate Timestamps:** The tool injects the current, real-world UTC timestamp into the analysis prompt.
+*   **Generation Stats:** Each report records its total generation time (seconds) and LLM token usage (text and vision breakdown). These stats are displayed in the web UI report header and in the CLI after each analysis completes.
 *   **Data Synthesis:** The final analysis is performed by an LLM guided by a detailed system prompt. It synthesizes insights from the user's text, image analyses, and shared domain summary to build a comprehensive profile.
 *   **Intelligence Selectors:** At the end of each analysis the LLM extracts structured selectors (locations, emails, phone numbers, cryptocurrency addresses, aliases) into a dedicated JSON block, which is surfaced separately in the web UI Entities panel.
 

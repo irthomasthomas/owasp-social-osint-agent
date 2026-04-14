@@ -626,6 +626,7 @@ class CliHandler:
         )
 
         if not is_error:
+            self._print_report_stats(result_dict.get("metadata", {}))
             if not self.args.no_auto_save:
                 path = self.agent.save_report(result_dict, self.args.format)
                 self.console.print(f"[green]Analysis saved to: {path}[/green]")
@@ -635,6 +636,58 @@ class CliHandler:
                 )
                 path = self.agent.save_report(result_dict, save_format)
                 self.console.print(f"[green]Analysis saved to: {path}[/green]")
+
+    def _print_report_stats(self, metadata: Dict[str, Any]):
+        """Prints a compact stats table showing generation time, token usage, and fetch stats."""
+        rows = []
+
+        gen_secs = metadata.get("generation_time_seconds")
+        if gen_secs is not None:
+            m = int(gen_secs) // 60
+            s = round(gen_secs % 60)
+            rows.append(("Duration", f"{m}m {s}s" if m > 0 else f"{s}s"))
+
+        usage = metadata.get("llm_usage")
+        if usage:
+            txt = usage.get("text", {})
+            vis = usage.get("vision", {})
+            total = txt.get("total_tokens", 0) + vis.get("total_tokens", 0)
+            if total > 0:
+                fmt = lambda n: f"{n:,}"
+                rows.append(("Tokens", f"{fmt(total)} total"))
+                if vis.get("total_tokens", 0) > 0:
+                    rows.append(("  Vision", fmt(vis["total_tokens"])))
+                if txt.get("total_tokens", 0) > 0:
+                    rows.append(
+                        (
+                            "  Text",
+                            f"{fmt(txt.get('prompt_tokens', 0))} prompt / {fmt(txt.get('completion_tokens', 0))} completion",
+                        )
+                    )
+
+        fetch = metadata.get("fetch_stats")
+        if fetch:
+            parts = []
+            if fetch.get("successful"):
+                parts.append(f"{fetch['successful']} ok")
+            if fetch.get("failed"):
+                parts.append(f"{fetch['failed']} failed")
+            if fetch.get("rate_limited"):
+                parts.append(f"{fetch['rate_limited']} rate-limited")
+            if parts:
+                rows.append(("Sources", ", ".join(parts)))
+
+        if not rows:
+            return
+
+        table = Table(show_header=False, box=None, padding=(0, 2))
+        table.add_column(style="dim", justify="right")
+        table.add_column()
+        for label, value in rows:
+            table.add_row(label, value)
+        self.console.print(
+            Panel(table, title="Report Stats", border_style="dim", expand=False)
+        )
 
     def _handle_purge(self):
         """Handles the interactive data purging process."""

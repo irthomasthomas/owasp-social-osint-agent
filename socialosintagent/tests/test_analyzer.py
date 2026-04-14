@@ -130,10 +130,17 @@ def test_analyze_method_orchestration(agent, mocker):
 
     agent.llm.analyze_image.return_value = "This is an image analysis."
 
-    # run_analysis returns a (report_str, entities_dict) tuple.
+    # run_analysis returns a (report_str, entities_dict, usage_dict) tuple.
     # Setting return_value to a plain string caused a ValueError at the
-    # `report, entities = self.llm.run_analysis(...)` unpack in analyzer.py.
-    agent.llm.run_analysis.return_value = ("This is the final report.", {})
+    # `report, entities, llm_usage = self.llm.run_analysis(...)` unpack in analyzer.py.
+    agent.llm.run_analysis.return_value = (
+        "This is the final report.",
+        {},
+        {
+            "text": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            "vision": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        },
+    )
 
     platforms_to_query = {"twitter": ["testuser"]}
     query = "analyze this user"
@@ -248,10 +255,21 @@ class TestAnalyzeErrorPaths:
         mocker.patch("socialosintagent.analyzer.FETCHERS", {"hackernews": fetcher})
         offline_agent.client_manager.get_platform_client.return_value = None
 
-        # run_analysis returns a (report_str, entities_dict) tuple.
+        # run_analysis returns a (report_str, entities_dict, usage_dict) tuple.
         # The plain string "Offline report content." would cause a ValueError
-        # at the `report, entities = self.llm.run_analysis(...)` unpack.
-        offline_agent.llm.run_analysis.return_value = ("Offline report content.", {})
+        # at the `report, entities, llm_usage = self.llm.run_analysis(...)` unpack.
+        offline_agent.llm.run_analysis.return_value = (
+            "Offline report content.",
+            {},
+            {
+                "text": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                "vision": {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                },
+            },
+        )
 
         result = offline_agent.analyze({"hackernews": ["coder"]}, "summarize")
 

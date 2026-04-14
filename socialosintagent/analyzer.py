@@ -150,6 +150,8 @@ class SocialOSINTAgent:
         """
         progress_console = console or Console(stderr=True)
 
+        _analysis_start = datetime.now(timezone.utc)
+
         # Phase 1: Fetch data from all platforms
         fetch_result = self._fetch_all_platform_data(
             platforms, force_refresh, fetch_options, progress_console
@@ -164,6 +166,11 @@ class SocialOSINTAgent:
 
         # Phase 2: Process images (if not offline)
         vision_stats = {}
+        self.llm._vision_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
         if not self.config.offline:
             vision_stats = self._perform_vision_analysis(
                 fetch_result.successful, progress_console
@@ -173,6 +180,10 @@ class SocialOSINTAgent:
         report = self._generate_analysis_report(
             fetch_result, query, vision_stats, progress_console
         )
+
+        if not report.get("error"):
+            duration = (datetime.now(timezone.utc) - _analysis_start).total_seconds()
+            report["metadata"]["generation_time_seconds"] = round(duration, 1)
 
         return report
 
@@ -462,8 +473,9 @@ class SocialOSINTAgent:
                         {"username_key": username, "data": data}
                     )
 
-                # Run analysis - Unpack the tuple
-                report, entities = self.llm.run_analysis(collected_data, query)
+                report, entities, llm_usage = self.llm.run_analysis(
+                    collected_data, query
+                )
 
             except RateLimitExceededError as e:
                 handle_rate_limit(console, "LLM Analysis", e)
@@ -502,6 +514,7 @@ class SocialOSINTAgent:
                 "rate_limited": len(fetch_result.rate_limited),
             },
             "vision_stats": vision_stats,
+            "llm_usage": llm_usage,
         }
 
         # Build header
@@ -777,7 +790,7 @@ class SocialOSINTAgent:
 
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         safe_q = (
-            "".join(c for c in query[:30] if c.isalnum() or c in " _-").strip()
+            "".join(c for c in query[:30] if c.isalnum() or c in "_-").strip()
             or "query"
         )
         safe_p = "_".join(sorted(platforms)) or "platforms"

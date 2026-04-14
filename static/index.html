@@ -29,19 +29,20 @@
                 <input type="text" id="newSessionName" placeholder="e.g. Target Alpha Assessment">
             </div>
             <div class="form-group">
-                <label>Platform</label>
-                <select id="newSessionPlatform">
-                    <option value="bluesky">Bluesky</option>
-                    <option value="twitter">Twitter / X</option>
-                    <option value="mastodon">Mastodon</option>
-                    <option value="reddit">Reddit</option>
-                    <option value="github">GitHub</option>
-                    <option value="hackernews">HackerNews</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Target Handle</label>
-                <input type="text" id="newSessionHandle" placeholder="e.g. user.bsky.social">
+                <label>Targets</label>
+                <div id="newSessionTargetsList" class="targets-list"></div>
+                <div style="display:flex;gap:8px;margin-top:6px;">
+                    <select id="nsPlatform" style="flex:0 0 120px;">
+                        <option value="bluesky">Bluesky</option>
+                        <option value="twitter">Twitter / X</option>
+                        <option value="mastodon">Mastodon</option>
+                        <option value="reddit">Reddit</option>
+                        <option value="github">GitHub</option>
+                        <option value="hackernews">HackerNews</option>
+                    </select>
+                    <input type="text" id="nsUsername" placeholder="username" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();nsAddTarget();}">
+                    <button class="topbar-btn" onclick="nsAddTarget()"><i class="fa-solid fa-plus"></i></button>
+                </div>
             </div>
             <div class="form-group">
                 <label>Initial Post Count</label>
@@ -118,17 +119,23 @@
                     <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">
                         <i class="fa-solid fa-grid-2"></i> Dashboard
                     </div>
-                    <div class="nav-item" data-page="contacts" onclick="switchPage('contacts')">
-                        <i class="fa-solid fa-address-book"></i> Contacts
-                        <span class="count" id="contactCount">0</span>
-                    </div>
                     <div class="nav-item" data-page="cache" onclick="switchPage('cache')">
                         <i class="fa-solid fa-database"></i> Cache
                         <span class="count" id="cacheCount">0</span>
                     </div>
-                    <div class="nav-item" data-page="media" onclick="switchPage('media')">
-                        <i class="fa-solid fa-images"></i> Media
-                        <span class="count" id="mediaCount">0</span>
+                    <div class="nav-parent" id="reportDataNav" onclick="toggleReportNav()">
+                        <i class="fa-solid fa-folder"></i> Report Data
+                        <i class="fa-solid fa-chevron-right nav-toggle-icon" id="reportNavChevron"></i>
+                    </div>
+                    <div class="nav-children" id="reportNavChildren">
+                        <div class="nav-child-item" data-page="contacts" onclick="switchPage('contacts')">
+                            <i class="fa-solid fa-address-book"></i> Contacts
+                            <span class="count" id="contactCount">0</span>
+                        </div>
+                        <div class="nav-child-item" data-page="media" onclick="switchPage('media')">
+                            <i class="fa-solid fa-images"></i> Media
+                            <span class="count" id="mediaCount">0</span>
+                        </div>
                     </div>
                 </div>
 
@@ -139,7 +146,7 @@
             </div>
 
             <div class="sidebar-footer">
-                <button class="btn-new-session" onclick="openModal('modalNewSession')">
+                <button class="btn-new-session" onclick="openNewSessionModal()">
                     <i class="fa-solid fa-plus"></i> New Session
                 </button>
             </div>

@@ -264,6 +264,7 @@ def _run_analysis_job(
     )
 
     try:
+        _job_start = datetime.now(timezone.utc)
         cache_manager, llm_analyzer, client_manager, session_manager = _get_components()
 
         agent = SocialOSINTAgent(config, cache_manager, llm_analyzer, client_manager)
@@ -310,18 +311,47 @@ def _run_analysis_job(
                 return _NoOpCtx()
 
         # Stage 1: platform fetches
+        sse_console = _SseConsole()
         _push_progress(
             job_id, "stage", {"stage": "fetch", "message": "Fetching platform data..."}
         )
 
-        # agent.analyze() signature (from cli_handler.py):
-        #   agent.analyze(platforms, query, force_refresh, fetch_options, console=console)
-        result = agent.analyze(
-            platforms,
-            query,
-            force_refresh,
-            fetch_options,
-            console=_SseConsole(),
+        fetch_result = agent._fetch_all_platform_data(
+            platforms, force_refresh, fetch_options, sse_console
+        )
+
+        if not fetch_result.has_any_data:
+            report_text = "[red]Data collection failed for all targets.[/red]"
+            with _JOBS_LOCK:
+                _JOBS[job_id]["status"] = "error"
+                _JOBS[job_id]["error"] = report_text
+                _JOBS[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+            _push_progress(job_id, "error", {"message": report_text})
+            with _JOBS_LOCK:
+                _prune_old_jobs()
+            return
+
+        # Stage 2: vision analysis
+        vision_stats = {}
+        llm_analyzer._vision_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
+        _push_progress(
+            job_id, "stage", {"stage": "vision", "message": "Analyzing media..."}
+        )
+        if not config.offline:
+            vision_stats = agent._perform_vision_analysis(
+                fetch_result.successful, sse_console
+            )
+
+        # Stage 3: synthesis
+        _push_progress(
+            job_id, "stage", {"stage": "synthesis", "message": "Generating report..."}
+        )
+        result = agent._generate_analysis_report(
+            fetch_result, query, vision_stats, sse_console
         )
 
         if result.get("error"):
@@ -337,6 +367,10 @@ def _run_analysis_job(
             return
 
         # Persist result to session
+        duration = (datetime.now(timezone.utc) - _job_start).total_seconds()
+        result.setdefault("metadata", {})["generation_time_seconds"] = round(
+            duration, 1
+        )
         session = session_manager.load(session_id)
         if session:
             query_id = session.add_query_result(
@@ -363,6 +397,7 @@ def _run_analysis_job(
             {
                 "message": "Analysis complete",
                 "query_id": _JOBS[job_id].get("query_id"),
+                "llm_usage": result.get("metadata", {}).get("llm_usage"),
             },
         )
         with _JOBS_LOCK:

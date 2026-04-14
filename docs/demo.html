@@ -290,6 +290,110 @@
             color: var(--accent);
         }
 
+        .nav-parent {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--fg-muted);
+            margin-bottom: 2px;
+            user-select: none;
+        }
+
+        .nav-parent:hover {
+            background: var(--bg-card);
+            color: var(--fg);
+        }
+
+        .nav-parent i:first-child {
+            width: 18px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .nav-toggle-icon {
+            margin-left: auto;
+            font-size: 10px;
+            transition: transform 0.2s ease;
+        }
+
+        .nav-parent.open .nav-toggle-icon {
+            transform: rotate(90deg);
+        }
+
+        .nav-children {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.25s ease;
+        }
+
+        .nav-children.open {
+            max-height: 120px;
+        }
+
+        .nav-child-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px 8px 36px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--fg-dim);
+            position: relative;
+            margin-bottom: 2px;
+        }
+
+        .nav-child-item:hover {
+            background: var(--bg-card);
+            color: var(--fg);
+        }
+
+        .nav-child-item.active {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .nav-child-item.active::before {
+            content: '';
+            position: absolute;
+            left: 18px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 16px;
+            background: var(--accent);
+            border-radius: 0 3px 3px 0;
+        }
+
+        .nav-child-item i {
+            width: 18px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .nav-child-item .count {
+            margin-left: auto;
+            background: var(--bg-card);
+            color: var(--fg-dim);
+            font-size: 10px;
+            padding: 2px 7px;
+            border-radius: 10px;
+            font-family: var(--font-mono);
+        }
+
+        .nav-child-item.active .count {
+            background: var(--accent-mid);
+            color: var(--accent);
+        }
+
         .session-item {
             display: flex;
             align-items: center;
@@ -2795,24 +2899,30 @@
                 </div>
             </div>
             <div class="sidebar-nav">
-                <div class="sidebar-section">
-                    <div class="sidebar-section-title">Navigation</div>
-                    <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">
-                        <i class="fa-solid fa-grid-2"></i> Dashboard
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">Navigation</div>
+                        <div class="nav-item active" data-page="dashboard" onclick="switchPage('dashboard')">
+                            <i class="fa-solid fa-grid-2"></i> Dashboard
+                        </div>
+                        <div class="nav-item" data-page="cache" onclick="switchPage('cache')">
+                            <i class="fa-solid fa-database"></i> Cache
+                            <span class="count" id="cacheCount">0</span>
+                        </div>
+                        <div class="nav-parent" id="reportDataNav" onclick="toggleReportNav()">
+                            <i class="fa-solid fa-folder"></i> Report Data
+                            <i class="fa-solid fa-chevron-right nav-toggle-icon" id="reportNavChevron"></i>
+                        </div>
+                        <div class="nav-children" id="reportNavChildren">
+                            <div class="nav-child-item" data-page="contacts" onclick="switchPage('contacts')">
+                                <i class="fa-solid fa-address-book"></i> Contacts
+                                <span class="count" id="contactCount">0</span>
+                            </div>
+                            <div class="nav-child-item" data-page="media" onclick="switchPage('media')">
+                                <i class="fa-solid fa-images"></i> Media
+                                <span class="count" id="mediaCount">0</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="nav-item" data-page="contacts" onclick="switchPage('contacts')">
-                        <i class="fa-solid fa-address-book"></i> Contacts
-                        <span class="count" id="contactCount">0</span>
-                    </div>
-                    <div class="nav-item" data-page="cache" onclick="switchPage('cache')">
-                        <i class="fa-solid fa-database"></i> Cache
-                        <span class="count" id="cacheCount">0</span>
-                    </div>
-                    <div class="nav-item" data-page="media" onclick="switchPage('media')">
-                        <i class="fa-solid fa-images"></i> Media
-                        <span class="count" id="mediaCount">0</span>
-                    </div>
-                </div>
                 <div class="sidebar-section">
                     <div class="sidebar-section-title">Sessions</div>
                     <div id="sessionList"></div>
@@ -3046,7 +3156,7 @@
                         query_id: 'q-001',
                         query: 'Comprehensive profile analysis and OSINT assessment',
                         timestamp: '2025-01-12T14:35:22Z',
-                        metadata: { generated_utc: '2025-01-12T14:35:22Z', mode: 'online', models: { text: 'claude-3.5-sonnet' } },
+                        metadata: { generated_utc: '2025-01-12T14:35:22Z', mode: 'online', models: { text: 'claude-3.5-sonnet' }, generation_time_seconds: 87.3, llm_usage: { text: { prompt_tokens: 18420, completion_tokens: 3120, total_tokens: 21540 }, vision: { prompt_tokens: 3200, completion_tokens: 680, total_tokens: 3880 } } },
                         entities: {
                             locations: ['Berlin, Germany', 'São Paulo, Brazil', 'Tallinn, Estonia'],
                             email_addresses: ['thr3at@proton.me', 'shadow.dev@tutanota.com'],
@@ -3061,7 +3171,7 @@
                         query_id: 'q-002',
                         query: 'Map social network connections and interaction patterns',
                         timestamp: '2025-01-13T10:19:44Z',
-                        metadata: { generated_utc: '2025-01-13T10:19:44Z', mode: 'Online', models: { text: 'claude-3.5-sonnet' } },
+                        metadata: { generated_utc: '2025-01-13T10:19:44Z', mode: 'Online', models: { text: 'claude-3.5-sonnet' }, generation_time_seconds: 62.1, llm_usage: { text: { prompt_tokens: 12800, completion_tokens: 2450, total_tokens: 15250 }, vision: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } } },
                         entities: {
                             locations: ['Berlin, Germany'],
                             aliases: ['cyb3r_w0lf', 'nullbyte_sys'],
@@ -3073,7 +3183,7 @@
                         query_id: 'q-003',
                         query: 'Assess sentiment, tone, and psychological indicators',
                         timestamp: '2025-01-14T16:44:11Z',
-                        metadata: { generated_utc: '2025-01-14T16:44:11Z', mode: 'Online', models: { text: 'claude-3.5-sonnet' } },
+                        metadata: { generated_utc: '2025-01-14T16:44:11Z', mode: 'Online', models: { text: 'claude-3.5-sonnet' }, generation_time_seconds: 54.8, llm_usage: { text: { prompt_tokens: 9200, completion_tokens: 1800, total_tokens: 11000 }, vision: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } } },
                         entities: {
                             organizations: ['Chaos Computer Club']
                         },
@@ -3093,7 +3203,7 @@
                         query_id: 'q-004',
                         query: 'Analyze posting patterns and behavioral indicators',
                         timestamp: '2025-01-10T09:25:33Z',
-                        metadata: { generated_utc: '2025-01-10T09:25:33Z', mode: 'Online', models: { text: 'gpt-4o' } },
+                        metadata: { generated_utc: '2025-01-10T09:25:33Z', mode: 'Online', models: { text: 'gpt-4o' }, generation_time_seconds: 143.6, llm_usage: { text: { prompt_tokens: 22100, completion_tokens: 4800, total_tokens: 26900 }, vision: { prompt_tokens: 5400, completion_tokens: 920, total_tokens: 6320 } } },
                         entities: {
                             locations: ['San Francisco, CA', 'Austin, TX'],
                             email_addresses: ['ceo@nexacorp.io'],
@@ -3106,7 +3216,7 @@
                         query_id: 'q-005',
                         query: 'Identify potential operational security vulnerabilities',
                         timestamp: '2025-01-11T11:09:58Z',
-                        metadata: { generated_utc: '2025-01-11T11:09:58Z', mode: 'Online', models: { text: 'gpt-4o' } },
+                        metadata: { generated_utc: '2025-01-11T11:09:58Z', mode: 'Online', models: { text: 'gpt-4o' }, generation_time_seconds: 98.2, llm_usage: { text: { prompt_tokens: 16500, completion_tokens: 3400, total_tokens: 19900 }, vision: { prompt_tokens: 1800, completion_tokens: 350, total_tokens: 2150 } } },
                         entities: {
                             locations: ['Kreuzberg, Berlin', 'San Francisco, CA'],
                             email_addresses: ['ceo@nexacorp.io', 'security@nexacorp.io'],
@@ -3656,10 +3766,24 @@
             const el = document.getElementById('page-' + page);
             if (el) el.classList.add('active');
             document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+            document.querySelectorAll('.nav-child-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+            if (page === 'contacts' || page === 'media') {
+                const parent = document.getElementById('reportDataNav');
+                const children = document.getElementById('reportNavChildren');
+                if (parent) parent.classList.add('open');
+                if (children) children.classList.add('open');
+            }
             if (page === 'contacts') renderContacts();
             if (page === 'cache') renderCache();
             if (page === 'dashboard') renderDashboard();
             if (page === 'media') renderMedia();
+        }
+
+        function toggleReportNav() {
+            const parent = document.getElementById('reportDataNav');
+            const children = document.getElementById('reportNavChildren');
+            parent.classList.toggle('open');
+            children.classList.toggle('open');
         }
 
         // ═══════════════ SESSIONS ═══════════════
@@ -3736,6 +3860,29 @@
             let metaHtml = '<div class="report-meta-item"><i class="fa-solid fa-clock"></i> <strong>' + esc(generated) + '</strong></div>';
             if (mode) metaHtml += '<div class="report-meta-item"><i class="fa-solid fa-wifi"></i> Mode: <strong>' + esc(mode) + '</strong></div>';
             if (model) metaHtml += '<div class="report-meta-item"><i class="fa-solid fa-microchip"></i> <strong>' + esc(model) + '</strong></div>';
+            const usage = meta.llm_usage;
+            if (usage) {
+                const fmtTok = n => n > 0 ? n.toLocaleString() : '\u2014';
+                const txt = usage.text || {};
+                const vis = usage.vision || {};
+                const totalAll = (txt.total_tokens || 0) + (vis.total_tokens || 0);
+                if (totalAll > 0) {
+                    metaHtml += '<div class="report-meta-item"><i class="fa-solid fa-coins"></i> Tokens: <strong>' + fmtTok(totalAll) + '</strong> total</div>';
+                    if (vis.total_tokens > 0) {
+                        metaHtml += '<div class="report-meta-item"><i class="fa-solid fa-eye"></i> Vision: <strong>' + fmtTok(vis.total_tokens) + '</strong></div>';
+                    }
+                    if (txt.total_tokens > 0) {
+                        metaHtml += '<div class="report-meta-item"><i class="fa-solid fa-pen"></i> Text: <strong>' + fmtTok(txt.prompt_tokens) + '</strong> prompt / <strong>' + fmtTok(txt.completion_tokens) + '</strong> completion</div>';
+                    }
+                }
+            }
+            if (meta.generation_time_seconds != null) {
+                const secs = meta.generation_time_seconds;
+                const m = Math.floor(secs / 60);
+                const s = Math.round(secs % 60);
+                const durStr = m > 0 ? (m + 'm ' + s + 's') : (s + 's');
+                metaHtml += '<div class="report-meta-item"><i class="fa-solid fa-stopwatch"></i> Generated in <strong>' + durStr + '</strong></div>';
+            }
             document.getElementById('reportMetaRow').innerHTML = metaHtml;
             requestAnimationFrame(() => {
                 initPanels();
@@ -3759,7 +3906,9 @@
         function downloadReport() {
             const s = state.currentSession; if (!s) return; const entry = s.query_history?.find(e => e.query_id === state.activeQueryId); if (!entry) { toast('No report', 'info'); return; }
             const meta = entry.metadata || {};
-            const header = '# ' + entry.query + '\n\n**Generated:** ' + (meta.generated_utc || entry.timestamp || '') + '\n**Session:** ' + s.name + '\n**Mode:** ' + (meta.mode || 'N/A') + '\n**Model:** ' + (meta.models?.text || 'N/A') + '\n\n---\n\n';
+            const usageLine = meta.llm_usage ? '\n**Tokens:** ' + ((meta.llm_usage.text?.total_tokens || 0) + (meta.llm_usage.vision?.total_tokens || 0)).toLocaleString() + ' total\n' : '';
+            const durLine = meta.generation_time_seconds != null ? (function() { var m = Math.floor(meta.generation_time_seconds / 60); var s = Math.round(meta.generation_time_seconds % 60); return '\n**Generation Time:** ' + (m > 0 ? m + 'm ' : '') + s + 's\n'; })() : '';
+            const header = '# ' + entry.query + '\n\n**Generated:** ' + (meta.generated_utc || entry.timestamp || '') + '\n**Session:** ' + s.name + '\n**Mode:** ' + (meta.mode || 'N/A') + '\n**Model:** ' + (meta.models?.text || 'N/A') + '\n' + usageLine + durLine + '\n---\n\n';
             const blob = new Blob([header + (entry.report || '')], { type: 'text/markdown' });
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); const ts = (entry.timestamp || Date.now()).replace(/[:.]/g, '-').slice(0, 19); a.download = s.name.replace(/[^a-zA-Z0-9]/g, '_') + '_' + ts + '.md';
             document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href); toast('Downloaded', 'success');
@@ -3922,7 +4071,7 @@
                         query_id: 'q-demo-' + Date.now(),
                         query: query,
                         timestamp: new Date().toISOString(),
-                        metadata: { generated_utc: new Date().toISOString(), mode: 'Online', models: { text: 'claude-3.5-sonnet (demo)' } },
+                        metadata: { generated_utc: new Date().toISOString(), mode: 'Online', models: { text: 'claude-3.5-sonnet (demo)' }, generation_time_seconds: 4.2, llm_usage: { text: { prompt_tokens: 8400, completion_tokens: 1600, total_tokens: 10000 }, vision: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } } },
                         entities: { locations: ['Demo Location'], aliases: ['demo_alias'], organizations: ['Demo Org'] },
                         report: '## Demo Analysis Report\n\nThis is a simulated analysis report generated in **demo mode**.\n\nThe query was: `' + query + '`\n\nIn a live deployment, this would contain a full OSINT analysis with:\n- Executive summary\n- Platform-by-platform breakdown\n- Cross-platform correlation analysis\n- Intelligence selectors\n- Risk assessment\n\n---\n\n*This report was generated by the demo interface for demonstration purposes.*'
                     };
