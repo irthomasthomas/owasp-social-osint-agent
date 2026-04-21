@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Social OSINT Agent — Demo</title>
     <link
         href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
@@ -157,6 +157,7 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
+            height: 100dvh;
             position: sticky;
             top: 0;
             overflow: hidden;
@@ -495,7 +496,9 @@
             display: flex;
             flex-direction: column;
             height: 100vh;
-            overflow: hidden;
+            height: 100dvh;
+            overflow-y: auto;
+            overflow-x: hidden;
         }
 
         .topbar {
@@ -2379,12 +2382,46 @@
         }
 
         .fp-graph-container {
-            height: 170px;
+            --graph-height: 170px;
+            height: var(--graph-height);
+            min-height: 60px;
             flex-shrink: 0;
             border-bottom: 1px solid var(--border);
             background: var(--bg);
             position: relative;
             overflow: hidden;
+        }
+
+        .fp-graph-resizer {
+            height: 6px;
+            background: transparent;
+            cursor: ns-resize;
+            flex-shrink: 0;
+            position: relative;
+            margin-top: -1px;
+        }
+
+        .fp-graph-resizer::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 28px;
+            height: 3px;
+            border-radius: 2px;
+            background: var(--fg-dim);
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .fp-graph-resizer:hover::after {
+            opacity: 0.6;
+        }
+
+        .fp-graph-resizer:active::after {
+            opacity: 0.9;
+            background: var(--accent);
         }
 
         .fp-graph-container svg {
@@ -2782,6 +2819,22 @@
             transition: opacity 0.15s;
         }
 
+        .hamburger-btn {
+            display: none;
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 199;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
+        }
+
         @media (max-width: 1200px) {
             .dash-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -2797,20 +2850,111 @@
         }
 
         @media (max-width: 768px) {
-            .sidebar {
+
+            .scanline-overlay {
                 display: none;
             }
 
+            .hamburger-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 40px;
+                height: 40px;
+                min-width: 40px;
+                padding: 0;
+                font-size: 18px;
+                order: -1;
+            }
+
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100vh;
+                height: 100dvh;
+                z-index: 200;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                box-shadow: none;
+                padding-top: env(safe-area-inset-top, 0px);
+                padding-bottom: env(safe-area-inset-bottom, 0px);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+                box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+            }
+
+            .sidebar-footer {
+                order: -1;
+                border-top: none;
+                border-bottom: 1px solid var(--border);
+                padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+            }
+
+            .topbar {
+                padding: 10px 12px;
+                padding-top: calc(10px + env(safe-area-inset-top, 0px));
+                gap: 8px;
+                position: sticky;
+                top: 0;
+                backdrop-filter: none;
+                background: var(--bg-elevated);
+            }
+
+            .topbar-search {
+                max-width: none;
+            }
+
+            .topbar-search input {
+                font-size: 16px;
+                padding: 10px 14px 10px 38px;
+            }
+
+            .page {
+                padding: 16px 12px;
+            }
+
+            #page-report.active {
+                padding: 12px 8px;
+                overflow-y: auto;
+            }
+
             .dash-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
             }
 
-            .cache-stats {
-                grid-template-columns: 1fr;
+            .stat-card {
+                padding: 14px;
             }
 
-            .contacts-grid {
-                grid-template-columns: 1fr;
+            .stat-card .stat-value {
+                font-size: 22px;
+            }
+
+            .report-query {
+                font-size: 15px;
+            }
+
+            .report-header-top {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .report-header-actions {
+                display: flex;
+                gap: 6px;
+                flex-wrap: wrap;
+            }
+
+            .report-meta-row {
+                gap: 12px;
+            }
+
+            .report-section {
+                padding: 16px 12px;
             }
 
             .hide-mobile {
@@ -2818,22 +2962,324 @@
             }
 
             .query-bar {
-                padding: 8px 16px;
+                padding: 8px 12px;
+                position: sticky;
+                top: 56px;
+                backdrop-filter: none;
+                background: var(--bg-elevated);
             }
 
             .query-bar-inner input {
-                font-size: 12px;
-                padding: 8px 10px;
+                font-size: 16px;
+                padding: 10px 10px;
             }
 
             .query-bar-inner .run-btn {
-                height: 34px;
+                height: 42px;
                 padding: 0 14px;
-                font-size: 12px;
+                font-size: 13px;
             }
 
             .target-chips-bar {
-                padding: 7px 16px;
+                padding: 7px 12px;
+                position: sticky;
+                top: 56px;
+                backdrop-filter: none;
+                background: var(--bg-elevated);
+            }
+
+            .target-chips-bar #targetChips {
+                flex-wrap: wrap;
+            }
+
+            .add-target-inline {
+                flex-wrap: wrap;
+            }
+
+            .add-target-inline select {
+                flex: 0 0 auto;
+            }
+
+            .add-target-inline input {
+                min-width: 100px;
+                font-size: 16px;
+            }
+
+            .contacts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .contacts-toolbar {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .contacts-size-control {
+                display: none;
+            }
+
+            .contacts-search input {
+                font-size: 16px;
+            }
+
+            .cache-stats {
+                grid-template-columns: 1fr;
+            }
+
+            #page-cache>div[style*="display:flex"] {
+                flex-wrap: wrap;
+            }
+
+            .modal-overlay {
+                padding: 12px;
+                align-items: flex-end;
+                backdrop-filter: none;
+                background: rgba(0, 0, 0, 0.75);
+            }
+
+            .modal {
+                width: 100%;
+                max-width: none;
+                max-height: 90vh;
+                overflow-y: auto;
+                border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+                padding: 20px 16px;
+                padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+            }
+
+            .modal.large {
+                max-width: none;
+            }
+
+            .modal .form-actions {
+                flex-direction: column;
+            }
+
+            .modal .form-actions .topbar-btn {
+                width: 100%;
+                justify-content: center;
+                padding: 12px;
+            }
+
+            .modal h2 {
+                font-size: 16px;
+            }
+
+            .modal input,
+            .modal select {
+                font-size: 16px !important;
+            }
+
+            .panel-group {
+                position: relative !important;
+                left: auto !important;
+                top: auto !important;
+                width: 100% !important;
+                height: auto !important;
+                margin-bottom: 8px;
+                border-radius: var(--radius);
+            }
+
+            .panel-group .pg-rh {
+                display: none !important;
+            }
+
+            .panel-group .pg-content {
+                height: auto !important;
+                max-height: 60vh;
+                overflow-y: auto;
+            }
+
+            #panelCanvas {
+                display: flex;
+                flex-direction: column;
+                height: auto !important;
+                overflow-y: auto !important;
+                position: relative !important;
+            }
+
+            .pg-tabs {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .pg-tab {
+                min-width: 44px;
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .pg-tab-label {
+                white-space: nowrap;
+            }
+
+            .pg-actions button {
+                min-width: 36px;
+                min-height: 36px;
+            }
+
+            .snap-guide {
+                display: none !important;
+            }
+
+            .pipeline-stepper {
+                padding: 20px 12px 12px;
+            }
+
+            .step-circle {
+                width: 42px;
+                height: 42px;
+                font-size: 14px;
+            }
+
+            .pipeline-connector {
+                width: 48px;
+                padding-top: 20px;
+            }
+
+            .step-label {
+                font-size: 10px;
+            }
+
+            .media-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+
+            .toast-container {
+                left: 8px;
+                right: 8px;
+                bottom: 8px;
+                top: auto;
+            }
+
+            .toast {
+                font-size: 13px;
+                padding: 10px 14px;
+            }
+
+            .markdown-report table,
+            .selector-table {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .heatmap-grid {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: 8px;
+            }
+
+            .session-item .session-delete {
+                opacity: 0.5;
+                min-width: 36px;
+                min-height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .chip-remove {
+                opacity: 0.6;
+                min-width: 28px;
+                min-height: 28px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .media-analysis-overlay {
+                opacity: 0.85;
+            }
+
+            .cache-item .ci-actions .ci-btn {
+                min-width: 36px;
+                min-height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .fp-contact-add {
+                min-width: 32px;
+                min-height: 32px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .dash-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .stat-card {
+                padding: 12px;
+            }
+
+            .stat-card .stat-value {
+                font-size: 20px;
+            }
+
+            .stat-card .stat-label {
+                font-size: 10px;
+            }
+
+            .sidebar-logo h1 {
+                font-size: 13px;
+            }
+
+            .report-list-item {
+                padding: 12px;
+                gap: 10px;
+            }
+
+            .report-list-item .rli-icon {
+                width: 34px;
+                height: 34px;
+                font-size: 14px;
+            }
+
+            .report-list-item .rli-query {
+                font-size: 12px;
+            }
+
+            .report-section {
+                padding: 12px 10px;
+            }
+
+            .report-section h3 {
+                font-size: 13px;
+            }
+
+            .report-section p {
+                font-size: 13px;
+            }
+
+            .topbar-btn {
+                padding: 10px 10px;
+                min-height: 40px;
+            }
+
+            .media-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+            }
+
+            .contact-card {
+                padding: 12px;
+            }
+
+            .contact-card-footer {
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .contact-card-footer .topbar-btn {
+                width: 100%;
+                justify-content: center;
             }
         }
 
@@ -2869,10 +3315,12 @@
 
         .sidebar {
             height: calc(100vh - 30px);
+            height: calc(100dvh - 30px);
         }
 
         .main-content {
             height: calc(100vh - 30px);
+            height: calc(100dvh - 30px);
         }
 
         .toast-container {
@@ -2886,6 +3334,7 @@
     <div class="scanline-overlay"></div>
     <div class="toast-container" id="toastContainer"></div>
 
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
     <div class="app-layout">
         <aside class="sidebar">
             <div class="sidebar-header">
@@ -2937,6 +3386,9 @@
 
         <main class="main-content">
             <div class="topbar">
+                <button class="topbar-btn hamburger-btn" id="hamburgerBtn" aria-label="Menu">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
                 <div class="topbar-search">
                     <i class="fa-solid fa-magnifying-glass"></i>
                     <input type="text" id="globalSearch" placeholder="Search reports, contacts, selectors..."
@@ -3297,6 +3749,16 @@
         }
         function toggleTheme() { applyTheme(state.theme === 'dark' ? 'light' : 'dark'); }
         function getCssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+        // ═══════════════ MOBILE SIDEBAR ═══════════════
+        function openMobileSidebar() {
+            document.querySelector('.sidebar').classList.add('open');
+            document.getElementById('sidebarOverlay').classList.add('active');
+        }
+        function closeMobileSidebar() {
+            document.querySelector('.sidebar').classList.remove('open');
+            document.getElementById('sidebarOverlay').classList.remove('active');
+        }
 
         // ═══════════════ UTILS ═══════════════
         function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;'); }
@@ -3729,9 +4191,11 @@
             else if (pid === 'timeline') body.innerHTML = '<div class="fp-scroll"><div class="timeline-section"><div class="timeline-title">Chronological Activity</div><div class="timeline-subtitle">Posts over time across all targets.</div><div id="fpChrono"></div></div><hr class="timeline-divider"><div class="timeline-section"><div class="timeline-title">Pattern of Life</div><div class="timeline-subtitle">Post frequency by day &times; hour (UTC).</div><div id="fpHeatmap"></div></div></div>';
             else if (pid === 'history') body.innerHTML = '<div class="fp-scroll" id="fpHistory"></div>';
             else if (pid === 'contacts') {
-                body.innerHTML = '<div class="fp-contacts-panel"><div class="fp-contacts-toolbar"><input type="text" id="fpContactsSearch" placeholder="Filter contacts..."></div><div class="fp-graph-container" id="fpGraphContainer"></div><div class="fp-contacts-list" id="fpContactsList"></div></div>';
+                body.innerHTML = '<div class="fp-contacts-panel"><div class="fp-contacts-toolbar"><input type="text" id="fpContactsSearch" placeholder="Filter contacts..."></div><div class="fp-graph-container" id="fpGraphContainer"></div><div class="fp-graph-resizer" id="fpGraphResizer"></div><div class="fp-contacts-list" id="fpContactsList"></div></div>';
                 const s = body.querySelector('#fpContactsSearch');
                 if (s) s.addEventListener('input', e => { state.panelFilter = e.target.value.toLowerCase(); renderPanelContacts(); });
+                const resizer = body.querySelector('#fpGraphResizer');
+                if (resizer) initGraphResizer(resizer);
             }
             else if (pid === 'entities') body.innerHTML = '<div class="fp-scroll" id="fpEntities"></div>';
             pane.appendChild(body);
@@ -3762,6 +4226,7 @@
         // ═══════════════ NAVIGATION ═══════════════
         function switchPage(page) {
             state.activePage = page;
+            closeMobileSidebar();
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             const el = document.getElementById('page-' + page);
             if (el) el.classList.add('active');
@@ -3806,6 +4271,7 @@
         function loadSession(id) {
             const session = MOCK_SESSIONS.find(s => s.session_id === id);
             if (!session) { toast('Session not found', 'error'); return; }
+            closeMobileSidebar();
             state.currentSession = JSON.parse(JSON.stringify(session));
             state.activeQueryId = null;
             renderSessions();
@@ -3920,6 +4386,36 @@
             const s = state.currentSession; if (!s) { el.innerHTML = '<div class="panel-empty">No session.</div>'; return; }
             const history = s.query_history || []; if (!history.length) { el.innerHTML = '<div class="panel-empty">No queries yet.</div>'; return; }
             el.innerHTML = [...history].reverse().map(e => '<div class="fp-history-item ' + (state.activeQueryId === e.query_id ? 'active' : '') + '" onclick="viewReportById(\'' + e.query_id + '\')"><div class="fp-history-query">' + esc(e.query) + '</div><div class="fp-history-ts">' + fmtDate(e.timestamp) + '</div></div>').join('');
+        }
+
+        // ═══════════════ GRAPH RESIZER ═══════════════
+        function initGraphResizer(handle) {
+            const graph = handle.previousElementSibling;
+            if (!graph) return;
+            let startY, startH;
+            const onMove = e => {
+                const y = e.touches ? e.touches[0].clientY : e.clientY;
+                const delta = y - startY;
+                const nextH = Math.max(60, Math.min(startH + delta, graph.parentElement.clientHeight - 80));
+                graph.style.setProperty('--graph-height', nextH + 'px');
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.removeEventListener('touchmove', onMove);
+                document.removeEventListener('touchend', onUp);
+            };
+            const onDown = e => {
+                e.preventDefault();
+                startY = e.touches ? e.touches[0].clientY : e.clientY;
+                startH = graph.getBoundingClientRect().height;
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+                document.addEventListener('touchmove', onMove, { passive: false });
+                document.addEventListener('touchend', onUp);
+            };
+            handle.addEventListener('mousedown', onDown);
+            handle.addEventListener('touchstart', onDown, { passive: false });
         }
 
         // ═══════════════ PANEL: CONTACTS ═══════════════
@@ -4191,6 +4687,7 @@
         (function init() {
             const saved = localStorage.getItem('osint-agent-theme'); applyTheme(saved || 'dark');
             const qi = document.getElementById('queryInput'); if (qi) qi.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runAnalysis(); });
+            const hb = document.getElementById('hamburgerBtn'); if (hb) hb.addEventListener('click', openMobileSidebar);
             const tc = document.getElementById('targetChipsBar'); if (tc) tc.style.display = 'none';
             const qb = document.getElementById('queryBar'); if (qb) qb.style.display = 'none';
             refreshSessionList();
