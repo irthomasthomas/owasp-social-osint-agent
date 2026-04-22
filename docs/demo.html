@@ -3103,6 +3103,10 @@
                 -webkit-overflow-scrolling: touch;
             }
 
+            .pg-header {
+                touch-action: pan-x pan-y;
+            }
+
             .pg-tab {
                 min-width: 44px;
                 min-height: 44px;
@@ -3848,6 +3852,7 @@
                 t.dataset.panel = pid;
                 t.innerHTML = '<i class="fa-solid ' + (PANEL_ICONS[pid] || 'fa-cube') + '"></i><span class="pg-tab-label">' + (PANEL_TITLES[pid] || pid) + '</span>';
                 t.addEventListener('mousedown', e => startTabDrag(e, g.id, pid));
+                t.addEventListener('touchstart', e => startTabDrag(e, g.id, pid), { passive: false });
                 tabBar.appendChild(t);
             });
             hdr.appendChild(tabBar);
@@ -3869,6 +3874,7 @@
             initGroupDrag(el);
             initGroupResize(el);
             el.addEventListener('mousedown', () => bringToFront(el));
+            el.addEventListener('touchstart', () => bringToFront(el), { passive: true });
             return el;
         }
 
@@ -4105,17 +4111,19 @@
         }
 
         function startTabDrag(e, groupId, panelId) {
-            if (e.button !== 0) return;
+            if (e.button !== 0 && !e.touches) return;
             const el = document.querySelector('.panel-group[data-group-id="' + groupId + '"]');
             if (!el || el.querySelectorAll('.pg-tab').length <= 1) return;
             const isPinned = el.dataset.pinned === 'true';
             if (isPinned) { switchTab(groupId, panelId); return; }
             e.preventDefault();
-            const sx = e.clientX, sy = e.clientY;
+            const sx = e.clientX || e.touches[0].clientX, sy = e.clientY || e.touches[0].clientY;
             let detached = false, lx = sx, ly = sy, ghost = null;
 
             function onM(ev) {
-                lx = ev.clientX; ly = ev.clientY;
+                const cx = ev.clientX ?? ev.touches[0].clientX;
+                const cy = ev.clientY ?? ev.touches[0].clientY;
+                lx = cx; ly = cy;
                 if (!detached && (Math.abs(lx - sx) > 8 || Math.abs(ly - sy) > 8)) {
                     detached = true;
                     ghost = document.createElement('div');
@@ -4140,6 +4148,7 @@
             }
             function onU() {
                 document.removeEventListener('mousemove', onM); document.removeEventListener('mouseup', onU);
+                document.removeEventListener('touchmove', onTM); document.removeEventListener('touchend', onU);
                 if (ghost) ghost.remove();
                 hideMergeTargets();
                 if (!detached) { switchTab(groupId, panelId); return; }
@@ -4155,6 +4164,7 @@
                     const nt = document.createElement('div'); nt.className = 'pg-tab'; nt.dataset.panel = panelId;
                     nt.innerHTML = '<i class="fa-solid ' + (PANEL_ICONS[panelId] || 'fa-cube') + '"></i><span class="pg-tab-label">' + (PANEL_TITLES[panelId] || panelId) + '</span>';
                     nt.addEventListener('mousedown', e2 => startTabDrag(e2, mergeTarget.dataset.groupId, panelId));
+                    nt.addEventListener('touchstart', e2 => startTabDrag(e2, mergeTarget.dataset.groupId, panelId), { passive: false });
                     mergeTarget.querySelector('.pg-tabs').appendChild(nt);
                     tab.remove();
                     populatePaneBody(mergeTarget, panelId);
@@ -4180,7 +4190,9 @@
                 if (el.querySelectorAll('.pg-tab').length === 0) el.remove();
                 savePanelLayout();
             }
+            function onTM(ev) { ev.preventDefault(); onM(ev); }
             document.addEventListener('mousemove', onM); document.addEventListener('mouseup', onU);
+            document.addEventListener('touchmove', onTM, { passive: false }); document.addEventListener('touchend', onU);
         }
 
         function populatePaneBody(groupEl, pid) {
