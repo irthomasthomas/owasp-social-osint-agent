@@ -2044,6 +2044,8 @@
             flex-shrink: 0;
             gap: 2px;
             padding-right: 4px;
+            position: relative;
+            z-index: 7;
         }
 
         .pg-header:hover {
@@ -3105,6 +3107,8 @@
 
             .pg-header {
                 touch-action: pan-x pan-y;
+                position: relative;
+                z-index: 7;
             }
 
             .pg-tab {
@@ -4020,6 +4024,7 @@
                 tab.dataset.panel = pid;
                 tab.innerHTML = '<i class="fa-solid ' + (PANEL_ICONS[pid] || 'fa-cube') + '"></i><span class="pg-tab-label">' + (PANEL_TITLES[pid] || pid) + '</span>';
                 tab.addEventListener('mousedown', e => startTabDrag(e, tgtId, pid));
+                tab.addEventListener('touchstart', e => startTabDrag(e, tgtId, pid), { passive: false });
                 tgtTabBar.appendChild(tab);
                 populatePaneBody(tgtEl, pid);
             });
