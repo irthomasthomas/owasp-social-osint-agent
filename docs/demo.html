@@ -213,6 +213,19 @@
             text-decoration: underline;
         }
 
+        .demo-badge {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            background: var(--accent-dim);
+            color: var(--accent);
+            border: 1px solid var(--accent-mid);
+            padding: 1px 6px;
+            border-radius: 4px;
+            vertical-align: middle;
+            margin-left: 6px;
+        }
+
         .sidebar-section {
             padding: 16px 12px 8px;
         }
@@ -1552,6 +1565,143 @@
             }
         }
 
+        .pipeline-stepper {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 0;
+            padding: 28px 20px 16px;
+        }
+
+        .pipeline-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            flex: 0 0 auto;
+        }
+
+        .step-circle {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: var(--fg-dim);
+            transition: all 0.4s ease;
+            position: relative;
+        }
+
+        .step-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--fg-dim);
+            transition: color 0.3s;
+            white-space: nowrap;
+        }
+
+        .pipeline-connector {
+            display: flex;
+            align-items: center;
+            padding-top: 24px;
+            width: 80px;
+            flex-shrink: 0;
+        }
+
+        .connector-line {
+            width: 100%;
+            height: 2px;
+            background: var(--border);
+            border-radius: 1px;
+            transition: background 0.4s ease;
+        }
+
+        .pipeline-step.active .step-circle {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+            box-shadow: 0 0 16px rgba(0, 229, 155, 0.2);
+        }
+
+        .pipeline-step.active .step-circle i {
+            animation: stepPulse 1.5s ease-in-out infinite;
+        }
+
+        .pipeline-step.active .step-label {
+            color: var(--accent);
+        }
+
+        .pipeline-step.complete .step-circle {
+            border-color: var(--accent);
+            background: var(--accent);
+            color: var(--bg);
+        }
+
+        .pipeline-step.complete .step-circle i {
+            animation: none;
+        }
+
+        .pipeline-step.complete .step-label {
+            color: var(--accent);
+        }
+
+        .pipeline-connector.complete .connector-line {
+            background: var(--accent);
+        }
+
+        @keyframes stepPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+
+        .pipeline-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 0 20px 12px;
+            font-size: 13px;
+            color: var(--fg-muted);
+        }
+
+        .pipeline-elapsed {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--fg-dim);
+            background: var(--bg-card);
+            padding: 2px 8px;
+            border-radius: 99px;
+            border: 1px solid var(--border);
+        }
+
+        .pipeline-heartbeat {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 20px;
+            font-size: 11px;
+            color: var(--fg-dim);
+        }
+
+        .pipeline-heartbeat.visible {
+            display: flex;
+        }
+
+        .heartbeat-pulse {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: dotBlink 1.5s ease-in-out infinite;
+        }
+
         .network-graph {
             background: var(--bg-elevated);
             border: 1px solid var(--border);
@@ -2032,21 +2182,10 @@
             height: 32px !important;
         }
 
-        .pg-header {
-            display: flex;
-            align-items: center;
-            height: 32px;
-            background: var(--bg-card);
-            border-bottom: 1px solid var(--border);
-            cursor: move;
-            user-select: none;
-            touch-action: none;
-            flex-shrink: 0;
-            gap: 2px;
-            padding-right: 4px;
-            position: relative;
-            z-index: 7;
-        }
+            .pg-header {
+                position: relative;
+                z-index: 7;
+            }
 
         .pg-header:hover {
             background: var(--bg-card-hover);
@@ -3097,18 +3236,13 @@
                 flex-direction: column;
                 height: auto !important;
                 overflow-y: auto !important;
+                overflow-x: hidden !important;
                 position: relative !important;
             }
 
             .pg-tabs {
                 overflow-x: auto;
                 -webkit-overflow-scrolling: touch;
-            }
-
-            .pg-header {
-                touch-action: pan-x pan-y;
-                position: relative;
-                z-index: 7;
             }
 
             .pg-tab {
@@ -3215,6 +3349,23 @@
                 min-width: 32px;
                 min-height: 32px;
             }
+
+            #themeToggle {
+                width: 44px;
+                height: 44px;
+                font-size: 16px;
+            }
+
+            .hamburger-btn {
+                width: 44px !important;
+                height: 44px !important;
+                min-width: 44px !important;
+                font-size: 20px;
+            }
+
+            .topbar-btn {
+                min-height: 44px;
+            }
         }
 
         @media (max-width: 480px) {
@@ -3291,54 +3442,11 @@
             }
         }
 
-        .demo-banner {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 30px;
-            background: #00c853;
-            color: #000;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 2px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-        }
 
-        .demo-banner span {
-            opacity: 0.7;
-            font-weight: 400;
-            font-size: 10px;
-            letter-spacing: 0;
-            margin-left: 12px;
-        }
-
-        .app-layout {
-            padding-top: 30px;
-        }
-
-        .sidebar {
-            height: calc(100vh - 30px);
-            height: calc(100dvh - 30px);
-        }
-
-        .main-content {
-            height: calc(100vh - 30px);
-            height: calc(100dvh - 30px);
-        }
-
-        .toast-container {
-            top: 50px;
-        }
     </style>
 </head>
 
 <body>
-    <div class="demo-banner">DEMO MODE<span>All data is pre-loaded and simulated</span></div>
     <div class="scanline-overlay"></div>
     <div class="toast-container" id="toastContainer"></div>
 
@@ -3349,7 +3457,7 @@
                 <div class="sidebar-logo">
                     <div class="icon-wrap"><i class="fa-solid fa-shield-halved"></i></div>
                     <div>
-                        <h1>Social OSINT Agent</h1>
+                        <h1>Social OSINT Agent <span class="demo-badge">DEMO</span></h1>
                         <span><a href="https://github.com/bm-github/owasp-social-osint-agent" target="_blank"
                                 rel="noopener">An OWASP Project</a></span>
                     </div>
@@ -3514,10 +3622,31 @@
             </div>
 
             <div class="page" id="page-progress">
-                <div class="loading-bar" id="progressBar"></div>
-                <div class="report-section" style="margin-top:20px;">
-                    <h3><span class="section-num"><i class="fa-solid fa-spinner fa-spin"></i></span> <span
-                            id="progressStageLabel">Starting analysis...</span></h3>
+                <div class="pipeline-stepper" id="pipelineStepper">
+                    <div class="pipeline-step" data-step="fetch">
+                        <div class="step-circle"><i class="fa-solid fa-download"></i></div>
+                        <div class="step-label">Fetch Data</div>
+                    </div>
+                    <div class="pipeline-connector"><div class="connector-line"></div></div>
+                    <div class="pipeline-step" data-step="vision">
+                        <div class="step-circle"><i class="fa-solid fa-eye"></i></div>
+                        <div class="step-label">Analyze Media</div>
+                    </div>
+                    <div class="pipeline-connector"><div class="connector-line"></div></div>
+                    <div class="pipeline-step" data-step="synthesis">
+                        <div class="step-circle"><i class="fa-solid fa-brain"></i></div>
+                        <div class="step-label">Generate Report</div>
+                    </div>
+                </div>
+                <div class="pipeline-status" id="pipelineStatus">
+                    <span id="progressStageLabel">Starting analysis...</span>
+                    <span class="pipeline-elapsed" id="pipelineElapsed"></span>
+                </div>
+                <div class="pipeline-heartbeat" id="pipelineHeartbeat">
+                    <div class="heartbeat-pulse"></div>
+                    <span>Waiting for response...</span>
+                </div>
+                <div class="report-section" style="margin-top:16px;">
                     <div id="progressLog"
                         style="font-family:var(--font-mono);font-size:12px;color:var(--fg-muted);max-height:400px;overflow-y:auto;line-height:1.8;">
                     </div>
@@ -3759,14 +3888,28 @@
         function getCssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 
         // ═══════════════ MOBILE SIDEBAR ═══════════════
-        function openMobileSidebar() {
-            document.querySelector('.sidebar').classList.add('open');
-            document.getElementById('sidebarOverlay').classList.add('active');
+        function toggleMobileSidebar() {
+            var sidebar = document.querySelector('.sidebar');
+            var overlay = document.getElementById('sidebarOverlay');
+            if (sidebar.classList.contains('open')) {
+                closeMobileSidebar();
+            } else {
+                sidebar.classList.add('open');
+                overlay.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
         }
         function closeMobileSidebar() {
-            document.querySelector('.sidebar').classList.remove('open');
-            document.getElementById('sidebarOverlay').classList.remove('active');
+            var sidebar = document.querySelector('.sidebar');
+            var overlay = document.getElementById('sidebarOverlay');
+            if (sidebar) sidebar.classList.remove('open');
+            if (overlay) overlay.classList.remove('active');
+            document.body.style.overflow = '';
         }
+
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 768) closeMobileSidebar();
+        });
 
         // ═══════════════ UTILS ═══════════════
         function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;'); }
@@ -3878,7 +4021,6 @@
             initGroupDrag(el);
             initGroupResize(el);
             el.addEventListener('mousedown', () => bringToFront(el));
-            el.addEventListener('touchstart', () => bringToFront(el), { passive: true });
             return el;
         }
 
@@ -4516,15 +4658,24 @@
 
             const svg = d3.select(container).append('svg').attr('width', W).attr('height', H);
             const zoomG = svg.append('g');
+            const isMobile = window.innerWidth <= 768;
             const zoomBehavior = d3.zoom().scaleExtent([0.3, 5]).on('zoom', ev => zoomG.attr('transform', ev.transform));
-            svg.call(zoomBehavior);
+            if (isMobile) {
+                zoomBehavior.filter(ev => {
+                    if (ev.type === 'wheel') return true;
+                    return false;
+                });
+                svg.call(zoomBehavior).on('touchstart.zoom', null).on('touchmove.zoom', null).on('touchend.zoom', null);
+            } else {
+                svg.call(zoomBehavior);
+            }
             svg.on('dblclick.zoom', null);
             graphZoom = { behavior: zoomBehavior, svg, zoomG };
 
             const sim = d3.forceSimulation(nodes).force('link', d3.forceLink(validLinks).id(d => d.id).distance(50).strength(0.5)).force('charge', d3.forceManyBody().strength(-80)).force('center', d3.forceCenter(W / 2, H / 2)).force('collision', d3.forceCollide(14));
             const link = zoomG.append('g').selectAll('line').data(validLinks).join('line').attr('class', 'graph-link').style('stroke-width', d => 0.5 + (d.weight / maxW) * 1.8);
             const node = zoomG.append('g').selectAll('g').data(nodes).join('g').attr('class', d => d.type === 'source' ? 'node-source' : 'node-contact')
-                .call(d3.drag().on('start', (ev, d) => { const t = d3.zoomTransform(svg.node()); if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('drag', (ev, d) => { const t = d3.zoomTransform(svg.node()); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+                .call(isMobile ? () => {} : d3.drag().on('start', (ev, d) => { const t = d3.zoomTransform(svg.node()); if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('drag', (ev, d) => { const t = d3.zoomTransform(svg.node()); d.fx = (ev.x - t.x) / t.k; d.fy = (ev.y - t.y) / t.k; }).on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
             node.append('circle').attr('r', d => d.type === 'source' ? 9 : 5 + (d.weight || 1) / maxW * 4).style('fill', d => d.type === 'source' ? accentColor : bgRaised).style('stroke', d => d.type === 'source' ? bgSurface : borderMedium).style('stroke-width', d => d.type === 'source' ? '2.5px' : '1.5px');
             node.append('text').attr('class', 'node-label').attr('dy', d => -(d.type === 'source' ? 12 : 10)).attr('text-anchor', 'middle').style('fill', textSec).text(d => d.label.length > 11 ? d.label.slice(0, 10) + '\u2026' : d.label);
             sim.on('tick', () => { link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y); node.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')'); });
@@ -4556,6 +4707,30 @@
         }
 
         // ═══════════════ ANALYSIS (DEMO) ═══════════════
+        function resetPipeline() {
+            document.querySelectorAll('.pipeline-step').forEach(el => { el.classList.remove('active', 'complete'); });
+            document.querySelectorAll('.pipeline-connector').forEach(el => { el.classList.remove('complete'); });
+            const hb = document.getElementById('pipelineHeartbeat'); if (hb) hb.classList.remove('visible');
+            const el = document.getElementById('pipelineElapsed'); if (el) el.textContent = '';
+        }
+
+        function advancePipeline(stepName) {
+            const steps = [...document.querySelectorAll('.pipeline-step')];
+            const connectors = [...document.querySelectorAll('.pipeline-connector')];
+            const idx = steps.findIndex(s => s.dataset.step === stepName);
+            steps.forEach((s, i) => {
+                if (i < idx) { s.classList.remove('active'); s.classList.add('complete'); }
+                else if (i === idx) { s.classList.remove('complete'); s.classList.add('active'); }
+                else { s.classList.remove('active', 'complete'); }
+            });
+            connectors.forEach((c, i) => { if (i < idx) c.classList.add('complete'); else c.classList.remove('complete'); });
+        }
+
+        function completePipeline() {
+            document.querySelectorAll('.pipeline-step').forEach(el => { el.classList.remove('active'); el.classList.add('complete'); });
+            document.querySelectorAll('.pipeline-connector').forEach(el => el.classList.add('complete'));
+        }
+
         function runAnalysis() {
             if (!state.currentSession) { toast('Select or create a session first', 'error'); return; }
             const s = state.currentSession; const qi = document.getElementById('queryInput'); const query = (qi ? qi.value : '').trim();
@@ -4563,23 +4738,31 @@
             if (qi) { qi.value = ''; qi.disabled = true; } const runBtn = document.getElementById('btnRunAnalysis'); if (runBtn) runBtn.disabled = true;
             setStatus(true, 'Starting...');
             switchPage('progress');
+            resetPipeline();
             const log = document.getElementById('progressLog');
             log.innerHTML = '';
             document.getElementById('progressStageLabel').textContent = 'Starting analysis...';
+            const hb = document.getElementById('pipelineHeartbeat'); if (hb) hb.classList.add('visible');
+            const startTime = Date.now();
+            const elapsedEl = document.getElementById('pipelineElapsed');
+            const elapsedTimer = setInterval(() => { const s = Math.round((Date.now() - startTime) / 1000); if (elapsedEl) elapsedEl.textContent = s + 's'; }, 1000);
 
             const stages = [
-                { msg: 'Collecting cached data for targets...', delay: 800 },
-                { msg: 'Analyzing cross-platform identity correlations...', delay: 1500 },
-                { msg: 'Running sentiment analysis on 2,847 text samples...', delay: 1200 },
-                { msg: 'Mapping social network graph...', delay: 1000 },
-                { msg: 'Extracting intelligence selectors...', delay: 900 },
-                { msg: 'Generating report...', delay: 1500 },
+                { msg: 'Collecting cached data for targets...', delay: 800, pipeline: 'fetch' },
+                { msg: 'Analyzing cross-platform identity correlations...', delay: 1500, pipeline: 'fetch' },
+                { msg: 'Running sentiment analysis on 2,847 text samples...', delay: 1200, pipeline: 'vision' },
+                { msg: 'Mapping social network graph...', delay: 1000, pipeline: 'vision' },
+                { msg: 'Extracting intelligence selectors...', delay: 900, pipeline: 'synthesis' },
+                { msg: 'Generating report...', delay: 1500, pipeline: 'synthesis' },
             ];
             let i = 0;
             function nextStage() {
                 if (i >= stages.length) {
+                    clearInterval(elapsedTimer);
+                    completePipeline();
                     appendLog('complete', '\u2713 Analysis complete');
                     setStatus(false);
+                    if (hb) hb.classList.remove('visible');
                     const newReport = {
                         query_id: 'q-demo-' + Date.now(),
                         query: query,
@@ -4600,12 +4783,14 @@
                     return;
                 }
                 const stage = stages[i];
+                advancePipeline(stage.pipeline);
                 document.getElementById('progressStageLabel').textContent = stage.msg;
                 appendLog('stage', '\u25b6 ' + stage.msg);
                 i++;
                 setTimeout(nextStage, stage.delay);
             }
             appendLog('info', 'Query: ' + query);
+            advancePipeline('fetch');
             setTimeout(nextStage, 600);
         }
 
@@ -4704,7 +4889,7 @@
         (function init() {
             const saved = localStorage.getItem('osint-agent-theme'); applyTheme(saved || 'dark');
             const qi = document.getElementById('queryInput'); if (qi) qi.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runAnalysis(); });
-            const hb = document.getElementById('hamburgerBtn'); if (hb) hb.addEventListener('click', openMobileSidebar);
+            const hb = document.getElementById('hamburgerBtn'); if (hb) hb.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); toggleMobileSidebar(); });
             const tc = document.getElementById('targetChipsBar'); if (tc) tc.style.display = 'none';
             const qb = document.getElementById('queryBar'); if (qb) qb.style.display = 'none';
             refreshSessionList();
